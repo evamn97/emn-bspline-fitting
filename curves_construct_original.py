@@ -131,7 +131,3 @@ ax2.plot(rcv_1pts[:, 0], rcv_1pts[:, 1], rcv_1pts[:, 2], color='blue', linewidth
 
 # plt.show()
 plt.savefig("ccog_refined_fit.png")
-
-# TODO: fit the two scan directions to surf_u and surf_v, then take the fitted control points in u for surf_u,
-#  and in v for surf_v, and apply them to an overall surf_v
-#  TODO: take the fitted curves_v in both directions and measure difference between them at crossing points

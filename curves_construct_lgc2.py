@@ -13,8 +13,9 @@ from mpl_toolkits.mplot3d import Axes3D
 import shelve
 from scipy import signal as sg
 
+
 def main():
-    filename = 'test_run1_end.out' ## Set this before running to not overwrite! ##
+    filename = 'test_run1_end.out'  ## Set this before running to not overwrite! ##
     # # load data_v
     data_v = np.loadtxt("ground_truth_08_14_20_1kpts3liens.csv", delimiter=',')
     data_v[:, [0, 1]] = data_v[:, [1, 0]] * 100  # assume z-unit = (x,y)-unitE-3 (scaling just for convenience)
@@ -102,7 +103,7 @@ def main():
         #     row += 1
         max_density = 0
         density = 1
-        if max_density >= 1: # old code that changes refinement (does not work in reasonable time for >1000 pts?
+        if max_density >= 1:  # old code that changes refinement (does not work in reasonable time for >1000 pts?
             max_err = np.amax(residuals)
             max_err_list.append(max_err)
             rcurve = None
@@ -117,12 +118,12 @@ def main():
                     # residuals = []
                     # row = 0
                     # while row < len(evl_points):
-                        #  was throwing error here
-                        #  error = sqrt(
-                        #     (evl_points[row, 0] - rcrv_pts[row]) ** 2 + (evl_points[row, 1] - rcrv_pts[row]) ** 2 + (
-                        #             evl_points[row, 2] - rcrv_pts[row, 2]) ** 2)
-                        # residuals.append(error)
-                        # row += 1
+                    #  was throwing error here
+                    #  error = sqrt(
+                    #     (evl_points[row, 0] - rcrv_pts[row]) ** 2 + (evl_points[row, 1] - rcrv_pts[row]) ** 2 + (
+                    #             evl_points[row, 2] - rcrv_pts[row, 2]) ** 2)
+                    # residuals.append(error)
+                    # row += 1
                     max_err = np.amax(residuals)
                     density += 1
             if rcurve is None:
@@ -130,7 +131,7 @@ def main():
             else:
                 rcurves.append(rcurve)
             new_err_list.append(max_err) \
-        # selective refinement (liam)
+                # selective refinement (liam)
         else:
             err_peaks, err_peaks_info = sg.find_peaks(residuals,
                                                       height=err_bound)  # find error peaks greater than 10 nm (steps)
@@ -144,15 +145,14 @@ def main():
                     # knts_to_add = np.linspace(pk/len(crv_pts)*0.995, pk/len(crv_pts)*1.005, 10)  # add 20 knots in
                     #                                                                            # normalized v coord +/-5%
                     #                                                                            # from the index of the peak. (Assuming we eval each data pt (fine for now))
-                    knts_to_add = np.random.normal(pk/len(evl_points), 0.02*pk/len(evl_points), (20, 1))
+                    knts_to_add = np.random.normal(pk / len(evl_points), 0.02 * pk / len(evl_points), (20, 1))
                     for knt in knts_to_add:
-                        if knt not in kv_new: # knotty puns
-                            kv_new = helpers.knot_insertion_kv(kv_new, knt[0], 1, 1) # add new knots to the kv from OG or last iter
+                        if knt not in kv_new:  # knotty puns
+                            kv_new = helpers.knot_insertion_kv(kv_new, knt[0], 1, 1)  # add new knots to the kv from OG or last iter
                             if ind == 0:
                                 ctrl_pts_new = helpers.knot_insertion(3, kv_new, ctrl_pts_old, knt[0])
-                            ctrl_pts_new = helpers.knot_insertion(3, kv_new, ctrl_pts_new, knt[0]) # update ctrl pts vector so old ctrl pts stay with their corresponding knts (does this matter?)
+                            ctrl_pts_new = helpers.knot_insertion(3, kv_new, ctrl_pts_new, knt[0])  # update ctrl pts vector so old ctrl pts stay with their corresponding knts (does this matter?)
                             ind += 1
-
 
                 fit_pts = profile_dict[index]
                 kv_new = kv_new.sort()
@@ -162,10 +162,9 @@ def main():
                 err_peaks, err_peaks_info = sg.find_peaks(rcrv_residuals,
                                                           height=err_bound)  # find error peaks greater than 10 nm (steps)
                 err = np.max(err_peaks_info['peak_heights'])
-                kv_new = rcurve.knotvector # holder for new knots
+                kv_new = rcurve.knotvector  # holder for new knots
                 ctrl_pts_old = rcurve.ctrlptsw if rcurve.rational else rcurve.ctrlpts
                 loop_count += 1
-
 
         rcurves.append(rcurve)
         index += 1
@@ -199,13 +198,8 @@ def main():
             print('ERROR shelving: {0}'.format(key))
     the_shelf.close()
 
-
     pass
+
 
 if __name__ == '__main__':
     main()
-
-
-# TODO: fit the two scan directions to surf_u and surf_v, then take the fitted control points in u for surf_u,
-#  and in v for surf_v, and apply them to an overall surf_v
-#  TODO: take the fitted curves_v in both directions and measure difference between them at crossing points

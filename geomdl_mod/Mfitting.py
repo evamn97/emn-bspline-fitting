@@ -4,6 +4,7 @@
     :synopsis: Provides curve and surface fitting functions
 
 .. moduleauthor:: Onur Rauf Bingol <orbingol@gmail.com>
+    edited by Eva Natinsky
 
 """
 
@@ -63,7 +64,7 @@ def interpolate_surface(points, size_u, size_v, degree_u, degree_v, **kwargs):
     Keyword Arguments:
         * ``centripetal``: activates centripetal parametrization method. *Default: False*
 
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
     :param size_u: number of data_v points on the u-direction
     :type size_u: int
@@ -123,7 +124,7 @@ def approximate_curve(points, degree, kv=None, **kwargs):
         * ``centripetal``: activates centripetal parametrization method. *Default: False*
         * ``ctrlpts_size``: number of control points. *Default: len(points) - 1*
 
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
     :param degree: degree of the output parametric curve
     :type degree: int
@@ -198,7 +199,7 @@ def approximate_curve(points, degree, kv=None, **kwargs):
     # Compute control points
     for i in range(dim):
         b = [pt[i] for pt in vector_r]
-        y = np.linalg.lstsq(matrix_l, b, rcond=None)    # modified this function from geomdl linalg solver to numpy
+        y = np.linalg.lstsq(matrix_l, b, rcond=None)    # emn - modified this function from geomdl linalg solver to numpy
         y = y[0].tolist()                      # geomdl solver returned list, numpy solver returns ndarray
         x = np.linalg.lstsq(matrix_u, y, rcond=None)
         x = x[0].tolist()

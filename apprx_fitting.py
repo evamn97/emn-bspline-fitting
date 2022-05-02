@@ -99,5 +99,3 @@ rsurf = operations.refine_knotvector(surf, [density_u, density_v])
 #   *** it's called in the code of operations.refine_knotvector(), but I don't understand that part of the code ***
 # knot_list = []
 # helpers.knot_refinement()
-
-# TODO: THINK ABOUT FITTING B-SPLINES TO EACH PROFILE IN FAST AND SLOW SCAN DIRECTIONS, REFINING EACH SPLINE AS NEEDED WITH HELPERS.KNOT_REFINEMENT AND THEN USE CONSTRUCT.CONSTRUCT_SURFACE TO CREATE THE SURFACE

@@ -14,7 +14,7 @@ from geomdl.exceptions import GeomdlException
 
 
 def construct_surface(direction, args, **kwargs):
-    """ Generates surfaces from curves_v.
+    """ Generates surfaces from curves.
 
     Keyword Arguments (optional):
         * ``degree``: degree of the 2nd parametric direction
