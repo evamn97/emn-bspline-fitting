@@ -147,7 +147,9 @@ def approximate_curve(points, degree, kv=None, **kwargs):
     uk = compute_params_curve(points, use_centripetal)
 
     # Compute knot vector
-    if kv is None:
+    if kv is not None:
+        num_cpts = len(kv) - degree - 1
+    else:
         kv = compute_knot_vector2(degree, num_dpts, num_cpts, uk)
 
     # Compute matrix N
@@ -430,7 +432,7 @@ def compute_params_curve(points, centripetal=False):
     Please refer to the Equations 9.4 and 9.5 for chord length parametrization, and Equation 9.6 for centripetal method
     on The NURBS Book (2nd Edition), pp.364-365.
 
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
     :param centripetal: activates centripetal parametrization method
     :type centripetal: bool

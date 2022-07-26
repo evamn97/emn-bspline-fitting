@@ -32,7 +32,7 @@ def create_data(width_mm: float, length_mm: float, height_nm: float, n: int, sam
 
     x_single = np.arange(0, width_nm, sample_spacing_nm)
 
-    a = edge_slope * patt_width_nm * signal.sawtooth((2 * np.pi * x_single / patt_width_nm) - (patt_width_nm / 2), width=0.5) / 4.
+    a = edge_slope * patt_width_nm * signal.sawtooth((2 * np.pi * x_single / patt_width_nm), width=0.5) / 4.
     a[a > height_nm / 2.] = height_nm / 2.
     a[a < -height_nm / 2.] = -height_nm / 2.
     z_single = a + height_nm / 2.
