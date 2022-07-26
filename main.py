@@ -170,16 +170,6 @@ def iter_gen_curve2(profile_pts, degree=3, cp_size_start=50, max_error=0.3):
 
         knots_split = np.array_split(interior_knots, idx_knots_split)
 
-        # new_knots = np.array([])
-        # for si in range(splits):
-        #     if np.amax(err_split[si]) > error_bound_value:
-        #         kns = np.linspace(knots_split[si][0], knots_split[si][-1], add_knots)[1:-1]
-        #         duplicates = np.where(np.isin(kns, knots_split[si]))
-        #         kns = np.delete(kns, duplicates)
-        #
-        #         # TODO: how to check refit error by section instead of over entire rcurve?
-        #         new_knots = np.concatenate((new_knots, kns))
-
         ids_s = np.arange(splits)
         results = pool.amap(si_gen_knots, err_split, knots_split, ids_s)
         while not results.ready():
