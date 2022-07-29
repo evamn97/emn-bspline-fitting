@@ -277,7 +277,7 @@ def merge_curves(c1, c2):
     return merged_curve
 
 
-def adding_knots(profile_pts, curve, num):
+def adding_knots(profile_pts, curve, num, max_error):
     """
     Adds num knots to the curve IF it reduces the fitting error.
     :param profile_pts: profile data points
@@ -286,11 +286,18 @@ def adding_knots(profile_pts, curve, num):
     :type curve: NURBS.Curve
     :param num: number of knots to add
     :type num: int
+    :param max_error: maximum error ratio allowed
+    :type max_error: float
+    :return: refined curve
     """
-    from geomdl_mod import Moperations as Mop
+    from geomdl_mod import Moperations as Mop, Mfitting
     import numpy as np  # pathos raises an 'MFitting undefined' error without this
 
+    error_bound_value = max_error * np.amax(profile_pts['z'].values)
     e_i = get_error(profile_pts, curve)
+    if np.amax(e_i) < error_bound_value:
+        return curve
+
     knots_i = curve.knotvector
     if len(knots_i) + num >= len(profile_pts):
         # print("Cannot add this many knots to curve without exceeding maximum knots limit.")
@@ -299,15 +306,20 @@ def adding_knots(profile_pts, curve, num):
     kns = np.linspace(knots_i[0], knots_i[-1], num)[1:-1]
     duplicates = np.where(np.isin(kns, knots_i))
     kns = np.delete(kns, duplicates)
+    new_kv = sorted(np.concatenate((curve.knotvector, kns)))
 
-    rcrv = curve
-    for k in kns:
-        try:
-            rcrv = Mop.insert_knot(rcrv, [k], [1])
-        except ValueError:
-            pass
-    rcrv_err = get_error(profile_pts, rcrv)
-    if np.average(rcrv_err) < np.average(e_i):
+    temp_kv = list(normalize(new_kv))
+    try:
+        rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
+    except ValueError:
+        return curve
+    rfit_curve_err = get_error(profile_pts, rfit_curve)
+
+    if np.average(rfit_curve_err) < np.average(e_i):
+        rcrv = NURBS.Curve(normalize_kv=False)
+        rcrv.degree = curve.degree
+        rcrv.ctrlpts = rfit_curve.ctrlpts
+        rcrv.knotvector = new_kv
         curve = rcrv
 
     return curve
@@ -360,7 +372,7 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, f
         curves_split = [c for (c, _) in temp]
         profiles_split = [p for (_, p) in temp]
 
-        results1 = pool.amap(adding_knots, profiles_split, curves_split, [add_knots] * splits)
+        results1 = pool.amap(adding_knots, profiles_split, curves_split, [add_knots] * splits, [max_error] * splits)
         while not results1.ready():
             sleep(1)
         rcurves_list = results1.get()
@@ -498,11 +510,11 @@ if __name__ == '__main__':
     # curves_fit = parallel_fitting(arr_splitting, deg, cpts_size)
     # c = curves_fit[i]
     profile_df = arr_splitting[0]
-    max_err = 0.15
+    max_err = 0.2
     filter_window = 30
 
     # c = iter_gen_curve(profile_df, max_error=max_err, cp_size_start=80)
     # curve_plotting(profile_df, c, max_err, title="Iteratively increased num control points")
 
-    cv2 = pbs_iter_curvefit2(profile_df, cp_size_start=30, max_error=max_err, filter_size=filter_window)
+    cv2 = pbs_iter_curvefit2(profile_df, cp_size_start=cpts_size, max_error=max_err, filter_size=filter_window)
     curve_plotting(profile_df, cv2, max_err, med_filter=filter_window, title="Iteratively added knots in high error sections")
