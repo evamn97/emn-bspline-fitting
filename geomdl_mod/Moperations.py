@@ -964,13 +964,13 @@ def split_curve(obj, param, **kwargs):
     curve2_ctrlpts = cpts[ks + r - 1:]
 
     # Create a new curve for the first half
-    curve1 = temp_obj.__class__()
+    curve1 = temp_obj.__class__(normalize_kv=False)
     curve1.degree = temp_obj.degree
     curve1.set_ctrlpts(curve1_ctrlpts)
     curve1.knotvector = curve1_kv
 
     # Create another curve fot the second half
-    curve2 = temp_obj.__class__()
+    curve2 = temp_obj.__class__(normalize_kv=False)
     curve2.degree = temp_obj.degree
     curve2.set_ctrlpts(curve2_ctrlpts)
     curve2.knotvector = curve2_kv

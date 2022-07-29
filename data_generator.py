@@ -5,27 +5,37 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from scipy import signal
+from scipy import signal, ndimage
 
 
-def create_data(width_mm: float, length_mm: float, height_nm: float, n: int, sample_spacing_nm: float, patt_width_um: float, edge_slope: float):
+def xz_plot(X_line, Z_line, title="AFM Scan Pattern"):
+    fig = plt.figure(figsize=(12.8, 9.6))
+    ax = plt.axes()
+    ax.plot(X_line, Z_line, label="X-Z scan plane")
+    ax.set_xlabel("X-dir (width, nm)")
+    ax.set_ylabel("Z-dir (height, nm)")
+    ax.set_title(title)
+    fig.tight_layout()
+    ax.legend()
+    plt.show()
+
+
+def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: float, edge_slope: float, noise_sigma: float):
     """ Generates XYZ data_v samples from a line-space stepped pattern.
      
-
-    :param width_mm: width (x-dir) in millimeters of area to be scanned.
-    :param length_mm: length (y-dir) in millimeters of area to be scanned.
-    :param height_nm: height (z-dir) of top surface of line in nanometers.
-    :param n: number of profiles to scan.
+    :param size: tuple (w, l, h) specifying width (x-dir, millimeters), length (y-dir, millimeters), height (z-dir, nanometers) of scan area
+    :param n: number of profiles to scan
     :param sample_spacing_nm: spacing between sample points in nms
     :param patt_width_um: width of one line or one space in line-space pattern (they are equal) in microns.
     :param edge_slope: slope of the rising/falling edge of the pattern
-    :return: ndarray of XYZ data_v.
-    
+    :param noise_sigma: standard deviation of the noise added to the pattern
+    :return: ndarray of XYZ data.
     """
 
     # I'm just converting everything to nanometers for convenience
-    width_nm = width_mm * 1000000
-    length_nm = length_mm * 1000000
+    width_nm = size[0] * 1000000
+    length_nm = size[1] * 1000000
+    height_nm = size[2]
     patt_width_nm = patt_width_um * 1000
 
     # ----------------------------- Construct x-z pattern from a trapezoidal wave signal -------------------------------
@@ -39,10 +49,11 @@ def create_data(width_mm: float, length_mm: float, height_nm: float, n: int, sam
 
     x_values = np.tile(x_single, n)
     z_values = np.tile(z_single, n)
+    s = np.random.default_rng().normal(scale=noise_sigma, size=len(z_values))
+    z_values = np.add(z_values, s)
 
     # ------------------------------------- Generate y values for each scan --------------------------------------------
 
-    # (y = interval*scan + y_start)
     y_start = (length_nm / n) / 2
 
     y_singles = np.linspace(y_start, length_nm, n)
@@ -55,25 +66,28 @@ def create_data(width_mm: float, length_mm: float, height_nm: float, n: int, sam
     return xyz_data
 
 
-width = .002    # mm
-length = .1   # mm
-height = 50.   # nm
-profiles = 10
-spacing = 12.  # nm
-pattern = .45  # um
-slope = 2.
-results = create_data(width, length, height, profiles, spacing, pattern, slope)
+width = .02    # mm     (1 um = .001 mm)
+length = .01   # mm
+height = 25.   # nm
+profiles = 8
+sample_spacing = 24.  # nm
+pattern_pitch = 5.  # um
+slope = 3.
+noise_stdev = 0.5
+results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
 
-np.savetxt("lines_patt.csv", results, delimiter=",")
+np.savetxt("lines_patt3.csv", results, delimiter=",")
 
 X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
 
-fig = plt.figure(figsize=(12.8, 9.6))
-ax = plt.axes(projection='3d')
-ax.plot_surface(X, Y, Z, alpha=0.6, cmap=cm.plasma)
-ax.scatter(X, Y, Z, alpha=0.25)
-ax.set_xlabel("X-dir (width, nm)")
-ax.set_ylabel("Y-dir (length, nm")
-ax.set_title("AFM Scan Height (nm)")
+# %% Plotting
+# xz_plot(X[0], Z[0])
 
-plt.show()
+# filter_size = 38
+# # small_filter = int(filter_size / 5)
+# small_filter = int(np.sqrt(filter_size))
+# Z_filtered = ndimage.median_filter(Z[0], size=small_filter, mode='nearest')
+# # xz_plot(X[0], Z_filtered, title="Median filter")
+# Z_filtered2 = ndimage.median_filter(Z_filtered, size=filter_size, mode='nearest')
+# xz_plot(X[0], Z_filtered2, title="Median filter, size={}".format(filter_size))
+
