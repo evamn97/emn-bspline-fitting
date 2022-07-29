@@ -11,6 +11,7 @@ from scipy import ndimage as nd
 from geomdl_mod import Mfitting, Moperations as Mop
 from geomdl import operations as op, abstract, helpers, compatibility, NURBS
 from geomdl.exceptions import GeomdlException
+from datetime import datetime as dt
 
 
 def find_nearest(a, a0):
@@ -385,19 +386,15 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, f
         if np.average(rcurve_err) < np.average(fit_error):
             curve = rcurve
             fit_error = rcurve_err
-            # curve_plotting(profile_pts, curve, max_error, med_filter=filter_size, title='Iter knot insertion')  # for debugging
-        elif np.amax(rcurve_err) > 1.5 * error_bound_value:
-            rfit_curve = Mfitting.approximate_curve(fit_pts, degree, kv=rcurve.knotvector)
-            rfit_error = get_error(filtered_profile_pts, rfit_curve)
-            if np.average(rfit_error) < np.average(fit_error):
-                curve = rfit_curve
-                fit_error = rfit_error
-                # curve_plotting(profile_pts, curve, max_error, med_filter=filter_size, title='Iter knot insertion + Refit')  # for debugging
+            curve_plotting(profile_pts, curve, max_error, med_filter=filter_size, title='Iter knot insertion')  # for debugging
 
         if splits <= (int(len(fit_pts) / 4) - add_splits):
             splits += add_splits  # only add splits up to half the number of data points
         else:
             add_knots += 1
+
+        if (len(rcurve.knotvector) + splits) >= (len(fit_pts) - 10):
+            break
 
     return curve
 
@@ -445,6 +442,20 @@ def curve_plotting(profile_pts, crv, max_error, med_filter: Union[None, float] =
     :type title: string
     :return: none
     """
+    # font sizes
+    SMALL_SIZE = 16
+    MEDIUM_SIZE = 20
+    BIGGER_SIZE = 24
+    LARGE_SIZE = 30
+
+    plt.rc('font', size=SMALL_SIZE)             # controls default text sizes
+    plt.rc('axes', titlesize=BIGGER_SIZE)       # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)       # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)       # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)       # fontsize of the tick labels
+    plt.rc('legend', fontsize=MEDIUM_SIZE)      # legend fontsize
+    plt.rc('figure', titlesize=LARGE_SIZE)      # fontsize of the figure title
+
     crv_pts = np.array(crv.evalpts)
     ct_pts = np.array(crv.ctrlpts)
     data_xz = profile_pts[['x', 'z']].values
@@ -464,21 +475,26 @@ def curve_plotting(profile_pts, crv, max_error, med_filter: Union[None, float] =
             ax2.plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue',linewidth=0.7)
             ax2.plot(filtered_data['x'].values, filtered_data['z'].values, label='Median Filtered Data', c='purple', linewidth=2)
             ax2.grid(True)
-            ax2.legend()
-            ax2.set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]', title='Median Filter Result')
+            ax2.legend(loc="upper right")
+            ax2.set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]', title='Median Filter Result'.upper())
             fig2.tight_layout()
     else:
         crv_err = get_error(profile_pts, crv, sep=True)
         error_bound_value = max_error * np.amax(profile_pts.values[:, -1])  # get physical value of error bound
 
-    fig, ax = plt.subplots(2, figsize=(30, 15), sharex='all')
+    fig, ax = plt.subplots(2, figsize=(30, 18), sharex='all')
     ax[0].grid(True)
     ax[0].plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue', linewidth=1.5, marker='.', markersize=4)
     ax[0].plot(crv_pts[:, 0], crv_pts[:, 2], label='Fitted Curve', c='red', linewidth=2)
     ax[0].plot(ct_pts[:, 0], ct_pts[:, 2], label='Control Points', marker='+', c='orange', linestyle='--', linewidth=0.75)
-    ax[0].legend()
+
+    scaled_kv = normalize(crv.knotvector, low=np.amin(profile_pts['x']), high=np.amax(profile_pts['x']))
+    ax[0].hist(scaled_kv, bins=(int(len(profile_pts['x']) / 2)), bottom=(np.amin(profile_pts['z']) - 10), label='Knot Locations')
+
+    ax[0].legend(loc="upper right")
     ax[0].set_ylim(np.amin(profile_pts['z'].values) - 10, np.amax(profile_pts['z'].values) + 10)
-    ax[0].set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]', title='B-spline Result: CP_size={}'.format(crv.ctrlpts_size))
+    ax[0].set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]',
+              title='B-spline Result: Control Points={}, Data Size={},'.format(crv.ctrlpts_size, len(profile_pts)))
 
     ax[1].grid(True)
     ax[1].plot(data_xz[:, 0], crv_err[:, 0], 'k', label='Overall fitting error')
@@ -487,17 +503,23 @@ def curve_plotting(profile_pts, crv, max_error, med_filter: Union[None, float] =
     # ax[1].plot(data_xz.values[:, 0], crv_err[:, 2], label='Y error')
     # ax[1].plot(data_xz.values[:, 0], crv_err[:, 3], label='Z error')
 
-    ax[1].axhline(y=error_bound_value, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--', label='User-set error bound')
-    ax[1].set(xlabel='Lateral Position X [nm]', ylabel='Error [nm]', title='Fitting Error: Max={}, Avg={}'.format(round(np.amax(crv_err), 4), round(np.average(crv_err), 4)))
-    ax[1].legend()
+    ax[1].axhline(y=error_bound_value, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--',
+                  label='User-set error bound')
+    ax[1].set(xlabel='Lateral Position X [nm]', ylabel='Error [nm]',
+              title='Fitting Error: Max={}, Avg={}, Fitting Bound={} nm'.format(round(np.amax(crv_err), 4),
+                                                                             round(np.average(crv_err), 4),
+                                                                             round(error_bound_value, 2)))
+    ax[1].legend(loc="upper right")
 
-    fig.suptitle(title, fontsize=24)
+    fig.suptitle(title.upper(), fontsize=30)
     fig.tight_layout()
 
     plt.show()
 
 
 if __name__ == '__main__':
+    start_time = dt.now()
+
     filename = "lines_patt3.csv"
     data_2d = pd.read_csv(filename, delimiter=',', names=['x', 'y', 'z'])
     profiles = len(set(data_2d['y'].values))
@@ -510,7 +532,7 @@ if __name__ == '__main__':
     # curves_fit = parallel_fitting(arr_splitting, deg, cpts_size)
     # c = curves_fit[i]
     profile_df = arr_splitting[0]
-    max_err = 0.2
+    max_err = 0.18
     filter_window = 30
 
     # c = iter_gen_curve(profile_df, max_error=max_err, cp_size_start=80)
@@ -518,3 +540,7 @@ if __name__ == '__main__':
 
     cv2 = pbs_iter_curvefit2(profile_df, cp_size_start=cpts_size, max_error=max_err, filter_size=filter_window)
     curve_plotting(profile_df, cv2, max_err, med_filter=filter_window, title="Iteratively added knots in high error sections")
+
+    end_time = dt.now()
+    runtime = end_time - start_time
+    print("Runtime: ", runtime)
