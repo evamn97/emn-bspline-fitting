@@ -94,7 +94,7 @@ def main():
     num_add_knots = 10  # number of knots to add on EACH SIDE of the high error
 
     # load data
-    filename = "../lines_patt.csv"
+    filename = "../data/lines_patt.csv"
     data_2d = pd.read_csv(filename, delimiter=',', names=['x', 'y', 'z'])
 
     # dimensions and inputs inferred from data
