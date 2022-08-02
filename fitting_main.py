@@ -1,15 +1,7 @@
-import numpy as np
-import pandas as pd
-from time import sleep
-from typing import Union
-import pathos.multiprocessing as mp
-from pathos.pools import ProcessPool as Pool
-from matplotlib import pyplot as plt
-from scipy import ndimage as nd
-from geomdl_mod import Mfitting, Moperations as Mop
-from geomdl import operations as op, abstract, helpers, compatibility, NURBS
-from geomdl.exceptions import GeomdlException
 from datetime import datetime as dt
+from time import sleep
+import numpy as np
+from utils import *
 
 
 def gen_curve(profile_pts, degree, cp_size):  # generate a curve fit with fixed num of ctpts
@@ -74,7 +66,7 @@ def iter_gen_curve(profile_pts, degree=3, cp_size_start=80, max_error=0.3):
     return curve
 
 
-def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=50, max_error=0.3):
+def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=50, max_error=0.2):
     """ Iterative curve fit for a single profile, adding knots each time based on max error limit.
 
     :param profile_pts: pandas dataframe of profile data points.
@@ -188,7 +180,7 @@ def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=50, max_error=0.3):
     return curve
 
 
-def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, filter_size=30):
+def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, filter_size=30, splits=4):
     """
     Iterative curve fit for a single profile, adding knots each time based on max error limit
     Uses parallel splitting based on the number of computer cpus.
@@ -199,6 +191,7 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, f
     :param cp_size_start: number of control points to start with
     :param max_error: maximum error bound, as a ratio of the maximum Z value in the data
     :param filter_size: rolling window size for the median filter
+    :param splits: number of splits in first iteration
     :return: fitted curve object
     """
     if filter_size > 1:
@@ -216,23 +209,33 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, f
     max_cp_size = max((len(fit_pts) - degree - 11), int((len(fit_pts) / 10)))  # ensures greatest # knots is len(fit_pts) - 10
     assert (cp_size_start < max_cp_size), "cp_size_start must be smaller than maximum number of control points. \nGot cp_size_start={}, max_cp_size={}.".format(cp_size_start, max_cp_size)
 
-    curve = Mfitting.approximate_curve(fit_pts, degree, ctrlpts_size=cp_size_start)
+    curve = fitting.approximate_curve(fit_pts, degree, ctrlpts_size=cp_size_start)
     curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, filter_plot=True, title='Initial curve fit')  # for debugging
     u_k = Mfitting.compute_params_curve(fit_pts)  # get u_k value conversions
 
     fit_error = get_error(filtered_profile_pts, curve)
-    add_knots = 3
-    splits = mp.cpu_count() if mp.cpu_count() < 10 else 8  # splits to start with
-    add_splits = 8  # splits to add each loop (if possible)
+    add_knots = 0
+    add_splits = 1  # splits to add each iteration
 
     unchanged_loops = 0
     pool = Pool(mp.cpu_count())
     while np.amax(fit_error) > error_bound_value:
-        u_i = list(map(tuple, np.repeat(np.linspace(0, 1, splits + 1), 2)[1:-1].reshape((-1, 2))))
-        results = pool.amap(section_curve, [curve] * splits, [filtered_profile_pts] * splits, u_i)
-        while not results.ready():
-            sleep(1)
-        temp = results.get()
+        failing = True
+        while failing:
+            u_i = list(map(tuple, np.repeat(np.linspace(0, 1, splits + 1), 2)[1:-1].reshape((-1, 2))))
+            try:
+                results = pool.amap(section_curve, [curve] * splits, [filtered_profile_pts] * splits, u_i)
+                temp = results.get()
+            except GeomdlException:
+                splits -= 1
+                if splits >= 1:
+                    continue
+                else:
+                    raise GeomdlException("Cannot split the curve.")
+            failing = False
+            while not results.ready():
+                sleep(1)
+
         curves_split = [c for (c, _) in temp]
         profiles_split = [p for (_, p) in temp]
 
@@ -243,31 +246,50 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, f
         rcurves_list = [r for (r, _) in temp]
         changed = [c for (_, c) in temp]
 
-        rcurve = rcurves_list[0]
-        for s in range(1, splits):
-            rcurve = merge_curves(rcurve, rcurves_list[s])
+        section_err = []
+        for i in range(len(rcurves_list)):
+            rc = rcurves_list[i]
+            pr = profiles_split[i]
+            err = np.amax(get_error(pr, rc))
+            section_err.append(err)
+        print("Max error for sections = {}".format(max(section_err)))
+
+        # rcurve = rcurves_list[0]
+        # for s in range(1, splits):
+        #     rcurve = merge_curves(rcurve, rcurves_list[s])
+        rcurve = merge_curves_multi(rcurves_list)
         rcurve_err = get_error(filtered_profile_pts, rcurve)
-        curve_plotting(profile_pts, rcurve, error_bound_value, med_filter=filter_size, title="Refined Curve")   # for debugging
+
+        print("Max error for rf_curve = {}\n".format(np.amax(rcurve_err)))
+
+        if not any(c for c in changed):     # if none of the curve sections have changed
+            unchanged_loops += 1
+        #     if unchanged_loops >= 4:
+        #         rcurve = Mfitting.approximate_curve(fit_pts, degree, kv=rcurve.knotvector)
+        #         print("Total Refit")
 
         if np.average(rcurve_err) < np.average(fit_error):
             curve = rcurve
             fit_error = rcurve_err
-            curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, title='Iter knot insert refit')  # for debugging
+            unchanged_loops = 0
+        # curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, title='Iter knot insert refit')  # for debugging
+        # plot_curve3d(profile_pts, rcurve, title="Refit curve plot")
 
-        if splits <= (int(len(fit_pts) / 4) - add_splits):
-            splits += add_splits  # only add splits up to half the number of data points
+        if int(curve.ctrlpts_size / (splits + add_splits)) > degree + 1:     # splits <= (int(len(fit_pts) / 4) - add_splits):
+            splits += add_splits  # each section must have at least p + 1 control points
         else:
             add_knots += 1
-        if not any(c for c in changed):     # if none of the curve sections have changed, break
-            unchanged_loops += 1
+            if add_knots >= 6:
+                print("Reached splits limit, breaking after add_knots = 6.")
+                break
 
         # break conditions to avoid infinite loops
-        if (len(curve.knotvector) + splits) >= (len(profile_pts) - 10):
+        if (len(curve.knotvector) + splits) >= (len(profile_pts) - 10) or curve.ctrlpts_size >= max_cp_size:
+            print("Breaking out of loop for params limit")
             break
-        if curve.ctrlpts_size >= max_cp_size:
-            break
-        if unchanged_loops > 10:
-            break
+        # if unchanged_loops >= 10:
+        #     print("Breaking out of loop after {} unchanged loops".format(unchanged_loops))
+        #     break
 
     return curve
 
@@ -275,11 +297,11 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.3, f
 if __name__ == '__main__':
     start_time = dt.now()
 
-    filename = "data/lines_patt3.csv"
+    filename = "data/lines_patt.csv"
     data_2d = pd.read_csv(filename, delimiter=',', names=['x', 'y', 'z'])
     profiles = len(set(data_2d['y'].values))
     deg = 3
-    cpts_size = 50
+    cpts_size = 100
 
     arr_splitting = np.array_split(data_2d, profiles)
     # i = np.random.randint(0, len(arr_splitting))
@@ -288,13 +310,14 @@ if __name__ == '__main__':
     # c = curves_fit[i]
     profile_df = arr_splitting[0]
     max_err = 0.18
-    filter_window = 30
+    error_bound = max_err * np.amax(profile_df['z'].values)
+    filter_window = 0
 
-    # c = iter_gen_curve(profile_df, max_error=max_err, cp_size_start=80)
-    # curve_plotting(profile_df, c, max_err, title="Iteratively increased num control points")
+    # cv1 = pbs_iter_curvefit(profile_df, cp_size_start=cpts_size, max_error=max_err)
+    # curve_plotting(profile_df, cv1, error_bound, med_filter=filter_window, title="Final BSpline Fit w/o curve split")
 
     cv2 = pbs_iter_curvefit2(profile_df, cp_size_start=cpts_size, max_error=max_err, filter_size=filter_window)
-    curve_plotting(profile_df, cv2, max_err, med_filter=filter_window, title="Final BSpline Fit")
+    curve_plotting(profile_df, cv2, error_bound, med_filter=filter_window, title="Final BSpline Fit w/ curve split")
 
     end_time = dt.now()
     runtime = end_time - start_time

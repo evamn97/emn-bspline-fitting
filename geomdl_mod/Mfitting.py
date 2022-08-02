@@ -9,21 +9,21 @@
 """
 
 import math
-from geomdl import BSpline, helpers, linalg, NURBS
+from geomdl import BSpline, helpers, linalg
 from geomdl._utilities import export
 import numpy as np
 
 
 @export
 def interpolate_curve(points, degree, **kwargs):
-    """ Curve interpolation through the data_v points.
+    """ Curve interpolation through the data points.
 
     Please refer to Algorithm A9.1 on The NURBS Book (2nd Edition), pp.369-370 for details.
 
     Keyword Arguments:
         * ``centripetal``: activates centripetal parametrization method. *Default: False*
 
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
     :param degree: degree of the output parametric curve
     :type degree: int
@@ -57,7 +57,7 @@ def interpolate_curve(points, degree, **kwargs):
 
 @export
 def interpolate_surface(points, size_u, size_v, degree_u, degree_v, **kwargs):
-    """ Surface interpolation through the data_v points.
+    """ Surface interpolation through the data points.
 
     Please refer to the Algorithm A9.4 on The NURBS Book (2nd Edition), pp.380 for details.
 
@@ -66,9 +66,9 @@ def interpolate_surface(points, size_u, size_v, degree_u, degree_v, **kwargs):
 
     :param points: data points
     :type points: list, tuple
-    :param size_u: number of data_v points on the u-direction
+    :param size_u: number of data points on the u-direction
     :type size_u: int
-    :param size_v: number of data_v points on the v-direction
+    :param size_v: number of data points on the v-direction
     :type size_v: int
     :param degree_u: degree of the output surface for the u-direction
     :type degree_u: int
@@ -133,7 +133,7 @@ def approximate_curve(points, degree, kv=None, **kwargs):
     :return: approximated B-Spline curve
     :rtype: BSpline.Curve
     """
-    # Number of data_v points
+    # Number of data points
     num_dpts = len(points)  # corresponds to variable "r" in the algorithm
 
     # Get keyword arguments
@@ -201,15 +201,15 @@ def approximate_curve(points, degree, kv=None, **kwargs):
     # Compute control points
     for i in range(dim):
         b = [pt[i] for pt in vector_r]
-        y = np.linalg.lstsq(matrix_l, b, rcond=None)    # emn - modified this function from geomdl linalg solver to numpy
-        y = y[0].tolist()                      # geomdl solver returned list, numpy solver returns ndarray
+        y = np.linalg.lstsq(matrix_l, b, rcond=None)  # emn - modified this function from geomdl linalg solver to numpy
+        y = y[0].tolist()  # geomdl solver returned list, numpy solver returns ndarray
         x = np.linalg.lstsq(matrix_u, y, rcond=None)
         x = x[0].tolist()
         for j in range(1, num_cpts - 1):
             ctrlpts[j][i] = x[j - 1]
 
-    # Generate a NURBS curve instance
-    curve = NURBS.Curve()
+    # Generate a BSpline curve instance
+    curve = BSpline.Curve()
     curve.degree = degree
     curve.ctrlpts = ctrlpts
     curve.knotvector = kv
@@ -229,11 +229,11 @@ def approximate_surface(points, size_u, size_v, degree_u, degree_v, **kwargs):
         * ``ctrlpts_size_u``: number of control points on the u-direction. *Default: size_u - 1*
         * ``ctrlpts_size_v``: number of control points on the v-direction. *Default: size_v - 1*
 
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
-    :param size_u: number of data_v points on the u-direction, :math:`r`
+    :param size_u: number of data points on the u-direction, :math:`r`
     :type size_u: int
-    :param size_v: number of data_v points on the v-direction, :math:`s`
+    :param size_v: number of data points on the v-direction, :math:`s`
     :type size_v: int
     :param degree_u: degree of the output surface for the u-direction
     :type degree_u: int
@@ -371,7 +371,7 @@ def compute_knot_vector(degree, num_points, params):
 
     :param degree: degree
     :type degree: int
-    :param num_points: number of data_v points
+    :param num_points: number of data points
     :type num_points: int
     :param params: list of parameters, :math:`\\overline{u}_{k}`
     :type params: list, tuple
@@ -399,7 +399,7 @@ def compute_knot_vector2(degree, num_dpts, num_cpts, params):
 
     :param degree: degree
     :type degree: int
-    :param num_dpts: number of data_v points
+    :param num_dpts: number of data points
     :type num_dpts: int
     :param num_cpts: number of control points
     :type num_cpts: int
@@ -466,14 +466,14 @@ def compute_params_curve(points, centripetal=False):
 def compute_params_surface(points, size_u, size_v, centripetal=False):
     """ Computes :math:`\\overline{u}_{k}` and :math:`\\overline{u}_{l}` for surfaces.
 
-    The data_v points array has a row size of ``size_v`` and column size of ``size_u`` and it is 1-dimensional. Please
+    The data points array has a row size of ``size_v`` and column size of ``size_u`` and it is 1-dimensional. Please
     refer to The NURBS Book (2nd Edition), pp.366-367 for details on how to compute :math:`\\overline{u}_{k}` and
     :math:`\\overline{u}_{l}` arrays for global surface interpolation.
 
     Please note that this function is not a direct implementation of Algorithm A9.3 which can be found on The NURBS Book
     (2nd Edition), pp.377-378. However, the output is the same.
 
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
     :param size_u: number of points on the u-direction
     :type size_u: int
@@ -518,7 +518,7 @@ def compute_params_surface(points, size_u, size_v, centripetal=False):
 def _build_coeff_matrix(degree, knotvector, params, points):
     """ Builds the coefficient matrix for global interpolation.
 
-    This function only uses data_v points to build the coefficient matrix. Please refer to The NURBS Book (2nd Edition),
+    This function only uses data points to build the coefficient matrix. Please refer to The NURBS Book (2nd Edition),
     pp364-370 for details.
 
     :param degree: degree
@@ -527,12 +527,12 @@ def _build_coeff_matrix(degree, knotvector, params, points):
     :type knotvector: list, tuple
     :param params: list of parameters
     :type params: list, tuple
-    :param points: data_v points
+    :param points: data points
     :type points: list, tuple
     :return: coefficient matrix
     :rtype: list
     """
-    # Number of data_v points
+    # Number of data points
     num_points = len(points)
 
     # Set up coefficient matrix
