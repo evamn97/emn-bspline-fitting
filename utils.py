@@ -30,7 +30,7 @@ def normalize(arr: Union[list, np.ndarray], low=0., high=1.) -> np.ndarray:
     return result
 
 
-def section_curve(curve, profile_pts: pd.DataFrame, bounds: Union[tuple, list]):
+def get_curve_section(curve, profile_pts: pd.DataFrame, bounds: Union[tuple, list]):
     """
     Returns a section of curve defined by low and high u_k values, with associated fitting points.
     :param curve: curve object to split
@@ -50,20 +50,23 @@ def section_curve(curve, profile_pts: pd.DataFrame, bounds: Union[tuple, list]):
         raise ValueError("One of the bounds is outside the range of input curve's knot vector.")
     if low == 0 or low == curve.knotvector[0]:
         id_u, u_i = find_nearest(u_k, high)
-        new_curve = Mop.split_curve(curve, u_i)[0]
-        section_pts = np.array_split(profile_pts, [id_u])[0]
+        section_curve = Mop.split_curve(curve, u_i)[0]
+        section_pts = np.array_split(profile_pts, [id_u + 1])[0]
+        section_uk = np.array_split(u_k, [id_u + 1])[0]
     elif high == 1 or high == curve.knotvector[-1]:
         id_u, u_i = find_nearest(u_k, low)
-        new_curve = Mop.split_curve(curve, u_i)[-1]
+        section_curve = Mop.split_curve(curve, u_i)[-1]
         section_pts = np.array_split(profile_pts, [id_u])[-1]
+        section_uk = np.array_split(u_k, [id_u])[-1]
     else:
         id_u0, u_i0 = find_nearest(u_k, low)
         id_u1, u_i1 = find_nearest(u_k, high)
-        new_curve = Mop.split_curve(Mop.split_curve(curve, u_i0)[-1], u_i1)[0]
+        section_curve = Mop.split_curve(Mop.split_curve(curve, u_i0)[-1], u_i1)[0]
         section_pts = np.array_split(profile_pts, [id_u0, id_u1 + 1])[1]
+        section_uk = np.array_split(u_k, [id_u0, id_u1 + 1])[1]
 
     section_pts = pd.DataFrame(section_pts, columns=['x', 'y', 'z'])
-    return new_curve, section_pts
+    return section_curve, section_pts, section_uk
 
 
 def merge_curves(c1, c2):
@@ -132,8 +135,6 @@ def merge_curves_multi(args):
 
     kv_new = list(np.asarray(kv_new).astype(float))
 
-    where_s = np.where(np.asarray(s) > 1)[0]    # returns a 1-dim tuple for some reason
-
     num_knots = len(ctrlpts_new) + p + 1  # assuming all cpts are kept, find the required number of knots from m = n + p + 1
     if num_knots != len(kv_new):
         raise ValueError("Something went wrong with getting the merged knot vector. Check knot removals.")
@@ -142,13 +143,16 @@ def merge_curves_multi(args):
     merged_curve.ctrlpts = ctrlpts_new
     merged_curve.knotvector = kv_new
 
+    where_s = np.where(np.asarray(s) > p)[0]    # returns a 1-dim tuple for some reason
     for i in where_s:
-        merged_curve = Mop.remove_knot(merged_curve, [join_knots[i]], [s[i] - 1])
+        delete = (s[i] - 1)
+        # delete = s[i] - p + 1       # ex: s >= 4 => 4 - 3 + 1 = 2 deletes
+        merged_curve = Mop.remove_knot(merged_curve, [join_knots[i]], [delete])
 
     return merged_curve
 
 
-def adding_knots(profile_pts, curve, num, error_bound_value):
+def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
     """
     Adds num knots to the curve IF it reduces the fitting error.
     :param profile_pts: profile data points
@@ -159,6 +163,8 @@ def adding_knots(profile_pts, curve, num, error_bound_value):
     :type num: int
     :param error_bound_value: maximum error value (nm) allowed
     :type error_bound_value: float
+    :param u_k: parametric coordinates of profile_pts
+    :type u_k: numpy.ndarray
     :return: refined curve
     """
     from geomdl_mod import Moperations as Mop, Mfitting
@@ -171,11 +177,9 @@ def adding_knots(profile_pts, curve, num, error_bound_value):
         return curve, changed
 
     knots_i = curve.knotvector
+    # if we don't want to add more knots, refit using existing knot vector
     if len(knots_i) + num >= int(len(profile_pts) / 2) or num == 0:
-        k = ((knots_i[-1] - knots_i[0]) / 2) + knots_i[0]   # get a centered knot
         new_kv = curve.knotvector
-        new_kv.append(k)
-        new_kv.sort()
         temp_kv = list(normalize(new_kv))
         try:
             rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
@@ -191,53 +195,46 @@ def adding_knots(profile_pts, curve, num, error_bound_value):
             rcrv.knotvector = new_kv
             curve = rcrv
             changed = True
-            print("Section refit with num=1")
+            # print("Section refit with num=0")
         return curve, changed
+    kns = []
+    ei_max = np.amax(e_i)
+    kns.append(u_k[np.where(e_i == ei_max)[0][0]])
+    if num > 1:
+        ids = np.where((e_i > error_bound_value) & (e_i != ei_max))[0]
 
-    kns = np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1]
-    duplicates = np.where(np.isin(kns, knots_i))
-    for i in duplicates:
-        s = helpers.find_multiplicity(kns[i], knots_i)
-        if s >= curve.degree:
-            kns = np.delete(kns, i)
+    # kns = np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1]
+    duplicates = np.where(np.isin(kns, knots_i))[0]
+    if len(duplicates) > 0:
+        for i in duplicates:
+            s = helpers.find_multiplicity(kns[i], knots_i)
+            if s >= curve.degree:
+                kns = np.delete(kns, i)
 
-    # kns = np.delete(kns, duplicates)
     if len(kns) == 0:
-        print("No new unique knots")
+        # print("No new unique knots")
         return curve, changed
 
-    rknot_curve = curve
-    for k in kns:
-        try:
-            rknot_curve = Mop.insert_knot(rknot_curve, [k], [1])
-        except GeomdlException:
-            continue
-    rknot_curve_err = get_error(profile_pts, rknot_curve)
-
-    new_kv = rknot_curve.knotvector
+    new_kv = sorted(curve.knotvector + kns)
     temp_kv = list(normalize(new_kv))
     try:
         rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
     except ValueError:
-        rfit_curve = rknot_curve
         print("Cannot refit section with new kv")
+        return curve, changed
     rfit_curve_err = get_error(profile_pts, rfit_curve)
 
-    if np.average(rfit_curve_err) < np.average(rknot_curve_err) < np.average(e_i):
+    # print("e_i: {}, \nrfit: {}\n".format(np.average(e_i), np.average(rfit_curve_err)))
+
+    if np.average(rfit_curve_err) < np.average(e_i):
         rcrv = BSpline.Curve(normalize_kv=False)
         rcrv.degree = curve.degree
         rcrv.ctrlpts = rfit_curve.ctrlpts
         rcrv.knotvector = new_kv
         curve = rcrv
         changed = True
-        print("Refit Section")
-    elif np.average(rknot_curve_err) < np.average(e_i):
-        curve = rknot_curve
-        changed = True
-        print("Insert Knot Section")
+        # print("Refit Section")
 
-    # if changed:
-    #     print("section changed")
     return curve, changed
 
 
@@ -285,19 +282,21 @@ def curve_plotting(profile_pts, crv, error_bound_value, med_filter=0, filter_plo
     :return: none
     """
     # font sizes
-    # SMALL_SIZE = 16
-    # MEDIUM_SIZE = 20
-    # BIGGER_SIZE = 24
-    LARGE_SIZE = 16
+    SMALL_SIZE = 16
+    MEDIUM_SIZE = 20
+    BIGGER_SIZE = 24
+    LARGE_SIZE = 26
 
-    # plt.rc('font', size=SMALL_SIZE)       # controls default text sizes
-    # plt.rc('axes', titlesize=BIGGER_SIZE)  # fontsize of the axes title
-    # plt.rc('axes', labelsize=MEDIUM_SIZE)  # fontsize of the x and y labels
-    # plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-    # plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-    # plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
+    plt.rc('font', size=SMALL_SIZE)       # controls default text sizes
+    plt.rc('axes', titlesize=BIGGER_SIZE)  # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)  # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
+    plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
     plt.rc('figure', titlesize=LARGE_SIZE)  # fontsize of the figure title
 
+    crv.delta = 0.001
+    crv.evaluate()
     crv_pts = np.array(crv.evalpts)
     ct_pts = np.array(crv.ctrlpts)
     data_xz = profile_pts[['x', 'z']].values
@@ -323,7 +322,7 @@ def curve_plotting(profile_pts, crv, error_bound_value, med_filter=0, filter_plo
             ax2.legend(loc="upper right")
             ax2.set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]')
             fig2.suptitle('Median Filter Result'.upper())
-            # fig2.tight_layout()
+            fig2.tight_layout()
             # plt.savefig("figures/med-fit.png")
     else:
         crv_err = get_error(profile_pts, crv, sep=True)
