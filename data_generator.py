@@ -9,6 +9,7 @@ from scipy import signal, ndimage
 
 
 def xz_plot(X_line, Z_line, title="AFM Scan Pattern"):
+    plt.rc('font', size=20)  # controls default text sizes
     fig = plt.figure(figsize=(12.8, 9.6))
     ax = plt.axes()
     ax.plot(X_line, Z_line, label="X-Z scan plane")
@@ -16,7 +17,7 @@ def xz_plot(X_line, Z_line, title="AFM Scan Pattern"):
     ax.set_ylabel("Z-dir (height, nm)")
     ax.set_title(title)
     fig.tight_layout()
-    ax.legend()
+    ax.legend(loc="upper right")
     plt.show()
 
 
@@ -49,8 +50,9 @@ def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: fl
 
     x_values = np.tile(x_single, n)
     z_values = np.tile(z_single, n)
-    s = np.random.default_rng().normal(scale=noise_sigma, size=len(z_values))
-    z_values = np.add(z_values, s)
+    if noise_sigma > 0:
+        s = np.random.default_rng().normal(scale=noise_sigma, size=len(z_values))
+        z_values = np.add(z_values, s)
 
     # ------------------------------------- Generate y values for each scan --------------------------------------------
 
@@ -73,15 +75,15 @@ profiles = 8
 sample_spacing = 24.  # nm
 pattern_pitch = 5.  # um
 slope = 3.
-noise_stdev = 0.5
+noise_stdev = 0
 results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
 
-np.savetxt("lines_patt3.csv", results, delimiter=",")
+# np.savetxt("lines_patt3.csv", results, delimiter=",")
 
 X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
 
 # %% Plotting
-# xz_plot(X[0], Z[0])
+xz_plot(X[0], Z[0])
 
 # filter_size = 38
 # # small_filter = int(filter_size / 5)
