@@ -9,8 +9,9 @@ from scipy import signal, ndimage
 
 
 def xz_plot(X_line, Z_line, title="AFM Scan Pattern"):
+    title += ", # points = {}".format(len(X_line))
     plt.rc('font', size=20)  # controls default text sizes
-    fig = plt.figure(figsize=(12.8, 9.6))
+    fig = plt.figure(figsize=(21, 10))
     ax = plt.axes()
     ax.plot(X_line, Z_line, label="X-Z scan plane")
     ax.set_xlabel("X-dir (width, nm)")
@@ -68,17 +69,17 @@ def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: fl
     return xyz_data
 
 
-width = .02    # mm     (1 um = .001 mm)
+width = 0.2    # mm     (1 um = .001 mm)
 length = .01   # mm
 height = 25.   # nm
 profiles = 8
-sample_spacing = 24.  # nm
-pattern_pitch = 5.  # um
-slope = 3.
-noise_stdev = 0
+sample_spacing = 20.  # nm
+pattern_pitch = 10.  # um
+slope = 1.75
+noise_stdev = 0.75
 results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
 
-# np.savetxt("lines_patt3.csv", results, delimiter=",")
+np.savetxt("data/lines_patt3.csv", results, delimiter=",")
 
 X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
 

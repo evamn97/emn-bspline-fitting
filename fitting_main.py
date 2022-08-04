@@ -208,8 +208,8 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, f
     max_cp_size = max((len(fit_pts) - degree - 11), int((len(fit_pts) / 10)))  # ensures greatest # knots is len(fit_pts) - 10
     assert (cp_size_start < max_cp_size), "cp_size_start must be smaller than maximum number of control points. \nGot cp_size_start={}, max_cp_size={}.".format(cp_size_start, max_cp_size)
 
-    curve = fitting.approximate_curve(fit_pts, degree, ctrlpts_size=cp_size_start)
-    curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, title='Initial curve fit')  # for debugging
+    curve = Mfitting.approximate_curve(fit_pts, degree, ctrlpts_size=cp_size_start)
+    # curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, filter_plot=True, title='Initial Curve Fit')  # for debugging
     u_k = Mfitting.compute_params_curve(fit_pts)  # get u_k value conversions
 
     fit_error = get_error(filtered_profile_pts, curve)
@@ -239,6 +239,11 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, f
         profiles_split = [p for (_, p, _) in temp]
         uk_split = [u for (_, _, u) in temp]
 
+        # debugging
+        if curve.ctrlpts_size == cp_size_start:
+            curve_plotting(profile_pts.head(len(profiles_split[0])), curves_split[0], error_bound_value, uk=uk_split[0], med_filter=filter_size, filter_plot=True, title="Initial Fit")
+            pass
+
         results1 = pool.amap(adding_knots, profiles_split, curves_split, [add_knots] * splits, [error_bound_value] * splits, uk_split)
         while not results1.ready():
             sleep(1)
@@ -255,24 +260,30 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, f
         # print("Max error for sections = {}\n".format(max(section_err)))
 
         rcurve = merge_curves_multi(rcurves_list)
-        rcurve_inknots = rcurve.knotvector[degree + 1:-degree - 1]
-        results2 = pool.amap(helpers.find_multiplicity, rcurve_inknots, [rcurve_inknots] * len(rcurve_inknots))
+        rknots_set = sorted(list(set(rcurve.knotvector)))
+        results2 = pool.amap(helpers.find_multiplicity, rknots_set, [rcurve.knotvector] * len(rcurve.knotvector))
         while not results2.ready():
             sleep(1)
         s = results2.get()
-        delete = np.where(np.asarray(s) > degree)[0]
+        delete = list(np.where(np.asarray(s) > degree)[0])[1:-1] + list(np.where(np.asarray(s) > degree + 1)[0])
         for d in delete:
-            rcurve = Mop.remove_knot(rcurve, [d], [s - degree])
+            k = rknots_set[d]
+            if k == 0.0 or k == 1.0:
+                if s[d] > (degree + 1):
+                    rcurve = Mop.remove_knot(rcurve, [k], [s[d] - degree - 1])
+            else:
+                rcurve = Mop.remove_knot(rcurve, [k], [s[d] - degree])
 
         rcurve_err = get_error(filtered_profile_pts, rcurve)
-        print("Max error for rf_curve = {}".format(np.amax(rcurve_err)))
-        print("Max error for og_curve = {}\n".format(np.amax(fit_error)))
+        # print("Max error for rf_curve = {}".format(np.amax(rcurve_err)))
+        # print("Max error for og_curve = {}\n".format(np.amax(fit_error)))
 
-        # if not any(c for c in changed):  # if none of the curve sections have changed
-        #     unchanged_loops += 1
+        if not any(c for c in changed):  # if none of the curve sections have changed
+            unchanged_loops += 1
 
         if np.amax(rcurve_err) < np.amax(fit_error):
-            curve_plotting(filtered_profile_pts, rcurve, error_bound_value, title="Merged RCurve Plot")
+            # if np.amax(rcurve_err) > error_bound_value:
+            #     curve_plotting(filtered_profile_pts, rcurve, error_bound_value, title="Refit Curve Plot")
             curve = rcurve
             fit_error = rcurve_err
             unchanged_loops = 0
@@ -291,11 +302,11 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, f
 if __name__ == '__main__':
     start_time = dt.now()
 
-    filename = "data/lines_patt.csv"
+    filename = "data/lines_patt3.csv"
     data_2d = pd.read_csv(filename, delimiter=',', names=['x', 'y', 'z'])
     profiles = len(set(data_2d['y'].values))
     deg = 3
-    cpts_size = 30
+    cpts_size = 1000
 
     arr_splitting = np.array_split(data_2d, profiles)
     # i = np.random.randint(0, len(arr_splitting))
@@ -304,14 +315,19 @@ if __name__ == '__main__':
     # c = curves_fit[i]
     profile_df = arr_splitting[0]
     max_err = 0.07
-    error_bound = max_err * np.amax(profile_df['z'].values)
-    filter_window = 0
-
-    # cv1 = pbs_iter_curvefit(profile_df, cp_size_start=cpts_size, max_error=max_err)
-    # curve_plotting(profile_df, cv1, error_bound, med_filter=filter_window, title="Final BSpline Fit w/o curve split")
+    filter_window = 40
+    if filter_window > 1:
+        small_filter = int(np.sqrt(filter_window) + 1) if int(np.sqrt(filter_window)) >= 1 else 1
+        filtered_z = nd.median_filter(nd.median_filter(nd.median_filter(profile_df['z'].values,
+                                                                        size=small_filter, mode='nearest'),
+                                                       size=filter_window, mode='nearest'),
+                                      size=small_filter, mode='nearest')
+        error_bound = max_err * np.amax(filtered_z)
+    else:
+        error_bound = max_err * np.amax(profile_df['z'].values)
 
     cv2 = pbs_iter_curvefit2(profile_df, cp_size_start=cpts_size, max_error=max_err, filter_size=filter_window)
-    curve_plotting(profile_df, cv2, error_bound, med_filter=filter_window, title="Final BSpline Fit w/ curve split")
+    curve_plotting(profile_df, cv2, error_bound, med_filter=filter_window, title="Final BSpline Fit")
 
     end_time = dt.now()
     runtime = end_time - start_time

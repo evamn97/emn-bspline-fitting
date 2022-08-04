@@ -31,7 +31,7 @@ def normalize(arr: Union[list, np.ndarray], low=0., high=1.) -> np.ndarray:
     return result
 
 
-def get_curve_section(curve, profile_pts: pd.DataFrame, bounds: Union[tuple, list]):
+def get_curve_section(curve, profile_pts: pd.DataFrame, bounds: np.ndarray):
     """
     Returns a section of curve defined by low and high u_k values, with associated fitting points.
     :param curve: curve object to split
@@ -68,6 +68,22 @@ def get_curve_section(curve, profile_pts: pd.DataFrame, bounds: Union[tuple, lis
 
     section_pts = pd.DataFrame(section_pts, columns=['x', 'y', 'z'])
     return section_curve, section_pts, section_uk
+
+
+# def get_section_multi(curve, profile_pts: pd.DataFrame, splits: int):
+#     """
+#         Returns a list of curve sections defined by low and high u_k values, with associated fitting points.
+#         :param curve: curve object to split
+#         :param profile_pts: data points the input curve is fitted to
+#         :param splits: how many sections to return
+#         :return: list of curve section (with clamped exterior knots), list of section data points
+#         """
+#     u_k = Mfitting.compute_params_curve(list(map(tuple, profile_pts.values)))
+#     temp = np.array_split(u_k, splits)
+#     u_i = [u[0] for u in temp][1:]
+#
+#     for u_i in splits_ui:
+
 
 
 def merge_curves(c1, c2):
@@ -125,8 +141,8 @@ def merge_curves_multi(args):
     for c in args:
         ctrlpts_new = ctrlpts_new + c.ctrlpts
         kv_new = sorted(kv_new + c.knotvector)
-        if c.knotvector[-1] != 1.0:
-            join_knots.append(c.knotvector[-1])
+        join_knots.append(c.knotvector[-1])
+    join_knots = join_knots[:-1]
     for j in join_knots:
         s_i = helpers.find_multiplicity(j, kv_new)
         for r in range(s_i - p - 1):    # ensures rule m = n + p + 1
@@ -149,8 +165,9 @@ def merge_curves_multi(args):
     where_s = np.where(np.asarray(s) > p)[0]    # returns a 1-dim tuple for some reason
     for i in where_s:
         # delete = (s[i] - 1)
-        delete = s[i] - p + 1       # ex: s >= 4 => 4 - 3 + 1 = 2 deletes
-        merged_curve = Mop.remove_knot(merged_curve, [join_knots[i]], [delete])
+        delete = s[i] - 2       # ex: s >= 4 => 4 - 3 + 1 = 2 deletes
+        if delete > 0:
+            merged_curve = Mop.remove_knot(merged_curve, [join_knots[i]], [delete])
 
     return merged_curve
 
@@ -257,7 +274,6 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
     """
     from geomdl_mod import Mfitting
     import numpy as np  # pathos raises an 'undefined' error without this
-    from numpy.random import default_rng as rng
 
     e_i = get_error(profile_pts, curve, uk=u_k)
     ei_max = np.amax(e_i)
@@ -267,28 +283,32 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
         knots_i = curve.knotvector
         kns = []
         # if we don't want to add more knots, refit using existing knot vector
-        if len(knots_i) + num >= int(len(profile_pts) - 1):
+        if len(knots_i) + num >= int(len(profile_pts)):
+            # kns.append(np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1][0])
+            ids2 = list(np.argsort(e_i)[::-1][num:num + 1])[0]
+            kns = list(set(kns + list(u_k[ids2])))
             num = 0
 
         if num >= 1:
-            # ids = list(np.argsort(e_i)[::-1][:num])
-            # kns = kns + list(u_k[ids])
-            kns = np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1]
-            duplicates = np.where(np.isin(kns, knots_i))[0]
-            for i in duplicates:
-                s = helpers.find_multiplicity(kns[i], knots_i)
-                if s == curve.degree:
-                    kns = list(np.delete(kns, i))
-                elif s > curve.degree:  # can't insert end point knots, so we shift over by one
-                    id_k = np.where(u_k == kns[i])[0][0]
-                    if kns[i] == knots_i[0]:
-                        kns[i] = u_k[id_k + 1]
-                    elif kns[i] == knots_i[-1]:
-                        kns[i] = u_k[id_k - 1]
-                    else:
-                        kns = list(np.delete(kns, i))
+            ids = list(np.argsort(e_i)[::-1][:num])
+            kns = list(set(kns + list(u_k[ids])))
+            for k in kns:
+                s = helpers.find_multiplicity(k, knots_i)
+                if s < curve.degree:
+                    continue
+                if k == knots_i[0]:      # can't insert end point knots, so we shift over by one
+                    repl_knot_idx = find_nearest(u_k, k)[0] + 1
+                    i_kns = np.where(kns == k)[0][0]
+                    kns[i_kns] = u_k[repl_knot_idx]     # use next largest u_k value
+                elif k == knots_i[-1]:
+                    repl_knot_idx = find_nearest(u_k, k)[0] - 1
+                    i_kns = np.where(kns == k)[0][0]
+                    kns[i_kns] = u_k[repl_knot_idx]  # use next largest u_k value
+                elif s >= curve.degree:
+                    kns.remove(k)
 
-        new_kv = sorted(curve.knotvector + kns)
+        new_kv = list(np.asarray(knots_i + kns).astype(float))
+        new_kv.sort()
         temp_kv = list(normalize(new_kv))
         try:
             rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
@@ -410,7 +430,7 @@ def parallel_errors(arr_split, curves):
     return error
 
 
-def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, filter_plot=False, title="BSpline curve fit plot"):
+def curve_plotting(profile_pts, crv, error_bound_value, sep=False, uk=None, med_filter=0, filter_plot=False, title="BSpline curve fit plot"):
     """ Plots a single curve in the X-Z plane with corresponding fitting error.
 
     :param profile_pts: profile data points
@@ -419,6 +439,8 @@ def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, f
     :type crv: BSpline.Curve
     :param error_bound_value: defined error bound for iterative fit as ratio of maximum curve value
     :type error_bound_value: float (must be between 0 and 1)
+    :param sep: if True, plot the x, y and z error in error plot
+    :type sep: bool
     :param uk: parametric coordinates of the data points
     :type uk: list
     :param med_filter: sets median filter window size if not None
@@ -429,17 +451,16 @@ def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, f
     :return: none
     """
     # font sizes
-    SMALL_SIZE = 22
-    MEDIUM_SIZE = 26
-    BIGGER_SIZE = 30
-    LARGE_SIZE = 32
+    SMALL_SIZE = 26
+    MEDIUM_SIZE = 30
+    LARGE_SIZE = 34
 
     plt.rc('font', size=MEDIUM_SIZE)       # controls default text sizes
-    plt.rc('axes', titlesize=BIGGER_SIZE)  # fontsize of the axes title
-    plt.rc('axes', labelsize=BIGGER_SIZE)  # fontsize of the x and y labels
+    plt.rc('axes', titlesize=LARGE_SIZE)  # fontsize of the axes title
+    plt.rc('axes', labelsize=LARGE_SIZE)  # fontsize of the x and y labels
     plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
     plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
-    plt.rc('legend', fontsize=BIGGER_SIZE)  # legend fontsize
+    plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
     plt.rc('figure', titlesize=LARGE_SIZE)  # fontsize of the figure title
 
     crv.delta = 0.001
@@ -448,7 +469,7 @@ def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, f
     ct_pts = np.array(crv.ctrlpts)
     data_xz = profile_pts[['x', 'z']].values
 
-    fig, ax = plt.subplots(2, figsize=(30, 22), sharex='all')
+    fig, ax = plt.subplots(2, figsize=(30, 20), sharex='all')
     if med_filter > 1:
         filtered_data = profile_pts[['x', 'y']]
         small_filter = int(np.sqrt(med_filter) + 1) if int(np.sqrt(med_filter)) >= 1 else 1
@@ -457,7 +478,7 @@ def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, f
                                                        size=med_filter, mode='nearest'),
                                       size=small_filter, mode='nearest')
         filtered_data['z'] = filtered_z
-        crv_err = get_error(filtered_data, crv, uk=uk, sep=True)
+        crv_err = get_error(filtered_data, crv, uk=uk, sep=sep)
 
         # ax[0].plot(filtered_data['x'].values, filtered_data['z'].values, label='Median Filtered Data', c='purple', linewidth=2)
 
@@ -470,12 +491,12 @@ def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, f
             ax2.set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]')
             fig2.suptitle('Median Filter Result'.upper())
             fig2.tight_layout()
-            # plt.savefig("figures/med-fit.png")
+            # plt.savefig("noisyfit_figures/med-fit.png")
     else:
-        crv_err = get_error(profile_pts, crv, uk=uk, sep=True)
+        crv_err = get_error(profile_pts, crv, uk=uk, sep=sep)
 
     ax[0].grid(True)
-    ax[0].plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue', linewidth=1.25, marker='.', markersize=1.5)
+    ax[0].plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue', linewidth=1.5, marker='.', markersize=2)
     ax[0].plot(crv_pts[:, 0], crv_pts[:, 2], label='Fitted Curve', c='red', linewidth=2)
     ax[0].plot(ct_pts[:, 0], ct_pts[:, 2], label='Control Points', marker='+', c='orange', linestyle='--', linewidth=0.75)
 
@@ -483,34 +504,37 @@ def curve_plotting(profile_pts, crv, error_bound_value, uk=None, med_filter=0, f
     ax[0].hist(scaled_kv, bins=(int(len(profile_pts['x']))), bottom=(np.amin(profile_pts['z']) - 10), label='Knot Locations')
 
     ax[0].set_ylim(np.amin(profile_pts['z'].values) - 10, np.amax(profile_pts['z'].values) + 10)
-    ax[0].set(xlabel='Lateral Position X [nm]', ylabel='Height Z [nm]',
-              title='B-spline Result: Control Points={}, Data Size={},'.format(crv.ctrlpts_size, len(profile_pts)))
+    ax[0].set(ylabel='Height Z [nm]',
+              title=(title.upper() + ': Control Points={}, Data Size={}'.format(crv.ctrlpts_size, len(profile_pts))))
 
     ax[1].grid(True)
-    ax[1].plot(data_xz[:, 0], crv_err[:, 0], 'k', label='Fitting error')
-
-    # ax[1].plot(data_xz.values[:, 0], crv_err[:, 1], label='X error')
-    # ax[1].plot(data_xz.values[:, 0], crv_err[:, 2], label='Y error')
-    # ax[1].plot(data_xz.values[:, 0], crv_err[:, 3], label='Z error')
+    if sep:
+        ax[1].plot(data_xz[:, 0], crv_err[:, 0], 'k', label='Fitting error', linewidth=1.75)
+        ax[1].plot(data_xz[:, 0], crv_err[:, 1], label='X error', c='blue', alpha=0.5)
+        # ax[1].plot(data_xz[:, 0], crv_err[:, 2], label='Y error', c='green', alpha=0.3)
+        ax[1].plot(data_xz[:, 0], crv_err[:, 3], label='Z error', c='red', alpha=0.7)
+    else:
+        ax[1].plot(data_xz[:, 0], crv_err, 'k', label='Fitting error')
 
     ax[1].axhline(y=error_bound_value, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--',
-                  label='Error bound')
+                  label='Error bound', linewidth=1.75)
     ax[1].set(xlabel='Lateral Position X [nm]', ylabel='Error [nm]',
               title='Fitting Error: Max={}, Avg={}, Fitting Bound={} nm'.format(round(np.amax(crv_err), 4),
                                                                                 round(np.average(crv_err), 4),
                                                                                 round(error_bound_value, 2)))
 
-    ax[0].legend(loc=(1.01, 0.5))
-    ax[1].legend(loc=(1.01, 0.5))
+    ax[0].legend(loc="upper right")
+    ax[1].legend(loc="upper right")
+    fig.tight_layout()
 
-    box = ax[0].get_position()
-    ax[0].set_position([box.x0 - 0.065, box.y0, box.width, box.height])
-    box = ax[1].get_position()
-    ax[1].set_position([box.x0 - 0.065, box.y0, box.width, box.height])
+    # ax[0].legend(loc=(1.01, 0.5))
+    # ax[1].legend(loc=(1.01, 0.5))
+    # box = ax[0].get_position()
+    # ax[0].set_position([box.x0 - 0.065, box.y0, box.width, box.height])
+    # box = ax[1].get_position()
+    # ax[1].set_position([box.x0 - 0.065, box.y0, box.width, box.height])
 
-    fig.suptitle(title.upper())
-    # fig.tight_layout()
-    fig_title = "figures/" + title.replace(' ', '-').lower() + "-cp{}".format(crv.ctrlpts_size) + ".png"
+    fig_title = "noisyfit_figures/" + title.replace(' ', '-').lower() + "-cp{}".format(crv.ctrlpts_size) + ".png"
     # plt.savefig(fig_title)
 
     plt.show()
