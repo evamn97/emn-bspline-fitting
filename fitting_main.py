@@ -209,7 +209,7 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, f
     assert (cp_size_start < max_cp_size), "cp_size_start must be smaller than maximum number of control points. \nGot cp_size_start={}, max_cp_size={}.".format(cp_size_start, max_cp_size)
 
     curve = Mfitting.approximate_curve(fit_pts, degree, ctrlpts_size=cp_size_start)
-    # curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, filter_plot=True, title='Initial Curve Fit')  # for debugging
+    curve_plotting(profile_pts, curve, error_bound_value, med_filter=filter_size, filter_plot=True, title='Initial Curve Fit')  # for debugging
     u_k = Mfitting.compute_params_curve(fit_pts)  # get u_k value conversions
 
     fit_error = get_error(filtered_profile_pts, curve)
@@ -238,11 +238,6 @@ def pbs_iter_curvefit2(profile_pts, degree=3, cp_size_start=80, max_error=0.2, f
         curves_split = [c for (c, _, _) in temp]
         profiles_split = [p for (_, p, _) in temp]
         uk_split = [u for (_, _, u) in temp]
-
-        # debugging
-        if curve.ctrlpts_size == cp_size_start:
-            curve_plotting(profile_pts.head(len(profiles_split[0])), curves_split[0], error_bound_value, uk=uk_split[0], med_filter=filter_size, filter_plot=True, title="Initial Fit")
-            pass
 
         results1 = pool.amap(adding_knots, profiles_split, curves_split, [add_knots] * splits, [error_bound_value] * splits, uk_split)
         while not results1.ready():
@@ -306,13 +301,10 @@ if __name__ == '__main__':
     data_2d = pd.read_csv(filename, delimiter=',', names=['x', 'y', 'z'])
     profiles = len(set(data_2d['y'].values))
     deg = 3
-    cpts_size = 1000
+    cpts_size = 100
 
     arr_splitting = np.array_split(data_2d, profiles)
-    # i = np.random.randint(0, len(arr_splitting))
 
-    # curves_fit = parallel_fitting(arr_splitting, deg, cpts_size)
-    # c = curves_fit[i]
     profile_df = arr_splitting[0]
     max_err = 0.07
     filter_window = 40

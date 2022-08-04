@@ -69,7 +69,7 @@ def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: fl
     return xyz_data
 
 
-width = 0.2    # mm     (1 um = .001 mm)
+width = 0.1    # mm     (1 um = .001 mm)
 length = .01   # mm
 height = 25.   # nm
 profiles = 8
