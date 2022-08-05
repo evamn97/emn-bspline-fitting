@@ -70,57 +70,6 @@ def get_curve_section(curve, profile_pts: pd.DataFrame, bounds: np.ndarray):
     return section_curve, section_pts, section_uk
 
 
-# def get_section_multi(curve, profile_pts: pd.DataFrame, splits: int):
-#     """
-#         Returns a list of curve sections defined by low and high u_k values, with associated fitting points.
-#         :param curve: curve object to split
-#         :param profile_pts: data points the input curve is fitted to
-#         :param splits: how many sections to return
-#         :return: list of curve section (with clamped exterior knots), list of section data points
-#         """
-#     u_k = Mfitting.compute_params_curve(list(map(tuple, profile_pts.values)))
-#     temp = np.array_split(u_k, splits)
-#     u_i = [u[0] for u in temp][1:]
-#
-#     for u_i in splits_ui:
-
-
-
-def merge_curves(c1, c2):
-    """
-    Merges two curves into a single curve
-
-    :param c1: first curve
-    :param c2: second curve
-    :return: merged curve
-    """
-    if not c1.knotvector[-1] == c2.knotvector[0]:
-        raise ValueError("The input curves must intersect at the merge point.")
-    if not c1.degree == c2.degree:
-        raise ValueError("The input curves must be of the same degree.")
-
-    p = c1.degree
-    merged_curve = BSpline.Curve(normalize_kv=False)
-    ctrlpts_new = c1.ctrlpts + c2.ctrlpts
-
-    join_knot = c1.knotvector[-1]  # last knot of c1 == first not of c2, multiplicity s = 2 * p + 1 => needs to be s = 1
-    kv_new = list(np.array(c1.knotvector + c2.knotvector).astype(np.float64))
-    s = helpers.find_multiplicity(join_knot, kv_new)
-    num_knots = len(ctrlpts_new) + p + 1  # assuming all cpts are kept, find the required number of knots from m = n + p + 1
-    while len(kv_new) - num_knots > 0:
-        kv_new.remove(join_knot)
-
-    merged_curve.degree = p
-    merged_curve.ctrlpts = ctrlpts_new
-    merged_curve.knotvector = kv_new
-
-    s = helpers.find_multiplicity(join_knot, kv_new)
-    if s > p:
-        merged_curve = Mop.remove_knot(merged_curve, [join_knot], [s - p])
-
-    return merged_curve
-
-
 def merge_curves_multi(args):
     """
     Merges two or more curves into a single curve
@@ -164,100 +113,17 @@ def merge_curves_multi(args):
 
     where_s = np.where(np.asarray(s) > p)[0]    # returns a 1-dim tuple for some reason
     for i in where_s:
-        # delete = (s[i] - 1)
-        delete = s[i] - 2       # ex: s >= 4 => 4 - 3 + 1 = 2 deletes
+        if len(kv_new) > 100:   # for large datasets, the knot deletions that occur during merging will blow up the fit erro
+            delete = s[i] - p
+        else:                   # for smaller datasets, it is preferred not to increase the multiplicity so much
+            delete = s[i] - 2
         if delete > 0:
             merged_curve = Mop.remove_knot(merged_curve, [join_knots[i]], [delete])
 
     return merged_curve
 
 
-# def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
-#     """
-#     Adds num knots to the curve IF it reduces the fitting error.
-#     :param profile_pts: profile data points
-#     :type profile_pts: pandas.DataFrame
-#     :param curve: curve to plot
-#     :type curve: BSpline.Curve
-#     :param num: number of knots to add
-#     :type num: int
-#     :param error_bound_value: maximum error value (nm) allowed
-#     :type error_bound_value: float
-#     :param u_k: parametric coordinates of profile_pts
-#     :type u_k: numpy.ndarray
-#     :return: refined curve
-#     """
-#     from geomdl_mod import Moperations as Mop, Mfitting
-#     import numpy as np  # pathos raises an 'undefined' error without this
-#
-#     e_i = get_error(profile_pts, curve)
-#     changed = False
-#     if np.amax(e_i) < error_bound_value:
-#         print("Section meets error bound")
-#         return curve, changed
-#
-#     knots_i = curve.knotvector
-#     # if we don't want to add more knots, refit using existing knot vector
-#     if len(knots_i) + num >= int(len(profile_pts) / 2) or num == 0:
-#         new_kv = curve.knotvector
-#         temp_kv = list(normalize(new_kv))
-#         try:
-#             rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
-#         except ValueError:
-#             print("Cannot refit section")
-#             return curve, changed
-#         rfit_curve_err = get_error(profile_pts, rfit_curve)
-#
-#         if np.average(rfit_curve_err) < np.average(e_i):
-#             rcrv = BSpline.Curve(normalize_kv=False)
-#             rcrv.degree = curve.degree
-#             rcrv.ctrlpts = rfit_curve.ctrlpts
-#             rcrv.knotvector = new_kv
-#             curve = rcrv
-#             changed = True
-#             # print("Section refit with num=0")
-#         return curve, changed
-#     kns = []
-#     ei_max = np.amax(e_i)
-#     kns.append(u_k[np.where(e_i == ei_max)[0][0]])
-#     if num > 1:
-#         ids = np.where((e_i > error_bound_value) & (e_i != ei_max))[0]
-#
-#     # kns = np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1]
-#     duplicates = np.where(np.isin(kns, knots_i))[0]
-#     for i in duplicates:
-#         s = helpers.find_multiplicity(kns[i], knots_i)
-#         if s >= curve.degree:
-#             kns = np.delete(kns, i)
-#
-#     if len(kns) == 0:
-#         # print("No new unique knots")
-#         return curve, changed
-#
-#     new_kv = sorted(curve.knotvector + kns)
-#     temp_kv = list(normalize(new_kv))
-#     try:
-#         rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
-#     except ValueError:
-#         print("Cannot refit section with new kv")
-#         return curve, changed
-#     rfit_curve_err = get_error(profile_pts, rfit_curve)
-#
-#     # print("e_i: {}, \nrfit: {}\n".format(np.average(e_i), np.average(rfit_curve_err)))
-#
-#     if np.average(rfit_curve_err) < np.average(e_i):
-#         rcrv = BSpline.Curve(normalize_kv=False)
-#         rcrv.degree = curve.degree
-#         rcrv.ctrlpts = rfit_curve.ctrlpts
-#         rcrv.knotvector = new_kv
-#         curve = rcrv
-#         changed = True
-#         # print("Refit Section")
-#
-#     return curve, changed
-
-
-def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
+def adding_knots(profile_pts, curve, num, error_bound_value, u_k, secondary=False):
     """
     Adds num knots to the curve IF it reduces the fitting error.
     :param profile_pts: profile data points
@@ -270,6 +136,8 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
     :type error_bound_value: float
     :param u_k: parametric coordinates of profile_pts
     :type u_k: numpy.ndarray
+    :param secondary: if True, uses secondary knot selection method
+    :type secondary: bool
     :return: refined curve
     """
     from geomdl_mod import Mfitting
@@ -279,17 +147,24 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
     ei_max = np.amax(e_i)
     changed = False
 
-    if ei_max > error_bound_value or num == 0:
+    if ei_max > error_bound_value:
         knots_i = curve.knotvector
         kns = []
-        # if we don't want to add more knots, refit using existing knot vector
-        if len(knots_i) + num >= int(len(profile_pts)):
-            # kns.append(np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1][0])
-            ids2 = list(np.argsort(e_i)[::-1][num:num + 1])[0]
-            kns = list(set(kns + list(u_k[ids2])))
-            num = 0
-
-        if num >= 1:
+        if len(knots_i) + num >= len(profile_pts):
+            # if number is too large, reset it to within the limit
+            num = (len(profile_pts) - len(knots_i)) if (len(profile_pts) - len(knots_i)) > 0 else 1
+            secondary = True
+        if secondary and num > 0:
+            choices = []
+            rng = np.random.default_rng()
+            # sometimes the algorithm can get stuck if it's at the knot limit for a section
+            # because oftentimes a centered knot or highest error knot already exists with multiplicity = p
+            # so we set up a random knot selection to try to reduce error and avoid infinite loops
+            if num < len(e_i):
+                choices += list(u_k[list(np.argsort(e_i)[::-1][:num])])
+            choices += list(np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1])
+            kns.append(rng.choice(choices, num)[0])
+        elif num > 0:      # primary knot selection method
             ids = list(np.argsort(e_i)[::-1][:num])
             kns = list(set(kns + list(u_k[ids])))
             for k in kns:
@@ -326,72 +201,6 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k):
             ei_max = np.amax(get_error(profile_pts, rcrv, uk=u_k))
             changed = True
             # print("Refit Section")
-
-    return curve, changed
-
-
-def adding_knots2(profile_pts, curve, num, error_bound_value, u_k):
-    """
-    Adds num knots to the curve IF it reduces the fitting error.
-    :param profile_pts: profile data points
-    :type profile_pts: pandas.DataFrame
-    :param curve: curve to plot
-    :type curve: BSpline.Curve
-    :param num: number of knots to add
-    :type num: int
-    :param error_bound_value: maximum error value (nm) allowed
-    :type error_bound_value: float
-    :param u_k: parametric coordinates of profile_pts
-    :type u_k: numpy.ndarray
-    :return: refined curve
-    """
-    from geomdl_mod import Moperations as Mop, Mfitting
-    import numpy as np  # pathos raises an 'undefined' error without this
-
-    e_i = get_error(profile_pts, curve, uk=u_k)
-    ei_max = np.amax(e_i)
-    changed = False
-
-    while ei_max > error_bound_value:
-        knots_i = curve.knotvector
-        kns = []
-        # if we don't want to add more knots, refit using existing knot vector
-        if len(knots_i) + num >= int(len(profile_pts) / 2):
-            num = 0
-
-        if num >= 1:
-            kns.append(u_k[np.where(e_i == ei_max)[0][0]])
-            ids = list(np.where((e_i > error_bound_value) & (e_i != ei_max))[0])
-            kns = kns + list(u_k[ids[:num-1]])
-            duplicates = np.where(np.isin(kns, knots_i))[0]
-            for i in duplicates:
-                s = helpers.find_multiplicity(kns[i], knots_i)
-                if s >= curve.degree:
-                    kns = list(np.delete(kns, i))
-
-        new_kv = sorted(curve.knotvector + kns)
-        temp_kv = list(normalize(new_kv))
-        try:
-            rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
-        except ValueError:
-            print("Cannot refit section with new kv")
-            break
-        rfit_emax = np.amax(get_error(profile_pts, rfit_curve, uk=u_k))
-
-        if rfit_emax < ei_max:
-            rcrv = BSpline.Curve(normalize_kv=False)
-            rcrv.degree = curve.degree
-            rcrv.ctrlpts = rfit_curve.ctrlpts
-            rcrv.knotvector = new_kv
-            e_i = get_error(profile_pts, rcrv, uk=u_k)
-            ei_max = np.amax(get_error(profile_pts, rcrv, uk=u_k))
-            curve = rcrv
-            changed = True
-            # print("Refit Section")
-
-        if num == 0:
-            # only run once if there are no knots added
-            break
 
     return curve, changed
 
@@ -527,15 +336,8 @@ def curve_plotting(profile_pts, crv, error_bound_value, sep=False, uk=None, med_
     ax[1].legend(loc="upper right")
     fig.tight_layout()
 
-    # ax[0].legend(loc=(1.01, 0.5))
-    # ax[1].legend(loc=(1.01, 0.5))
-    # box = ax[0].get_position()
-    # ax[0].set_position([box.x0 - 0.065, box.y0, box.width, box.height])
-    # box = ax[1].get_position()
-    # ax[1].set_position([box.x0 - 0.065, box.y0, box.width, box.height])
-
-    fig_title = "noisyfit_figures/" + title.replace(' ', '-').lower() + "-cp{}".format(crv.ctrlpts_size) + ".png"
-    # plt.savefig(fig_title)
+    fig_title = "timetrials_figures/" + title.replace(' ', '-').lower() + "-cp{}".format(crv.ctrlpts_size) + ".png"
+    plt.savefig(fig_title)
 
     plt.show()
 

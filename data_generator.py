@@ -69,17 +69,17 @@ def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: fl
     return xyz_data
 
 
-width = 0.1    # mm     (1 um = .001 mm)
+width = 0.5    # mm     (1 um = .001 mm)
 length = .01   # mm
 height = 25.   # nm
 profiles = 8
-sample_spacing = 20.  # nm
-pattern_pitch = 10.  # um
+sample_spacing = 50.  # nm
+pattern_pitch = 20.  # um
 slope = 1.75
-noise_stdev = 0.75
+noise_stdev = 0.
 results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
 
-np.savetxt("data/lines_patt3.csv", results, delimiter=",")
+np.savetxt("data/lines_patt10000.csv", results, delimiter=",")
 
 X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
 
