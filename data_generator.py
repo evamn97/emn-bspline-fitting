@@ -69,28 +69,29 @@ def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: fl
     return xyz_data
 
 
-width = 0.5    # mm     (1 um = .001 mm)
-length = .01   # mm
-height = 25.   # nm
-profiles = 8
-sample_spacing = 50.  # nm
-pattern_pitch = 20.  # um
-slope = 1.75
-noise_stdev = 0.
-results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
+if __name__ == '__main__':
+    width = 0.02    # mm     (1 um = .001 mm)
+    length = 0.02   # mm
+    height = 25.   # nm
+    profiles = 8
+    sample_spacing = 20.  # nm
+    pattern_pitch = 5.  # um
+    slope = 2.0
+    noise_stdev = 1.
+    results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
 
-np.savetxt("data/lines_patt10000.csv", results, delimiter=",")
+    np.savetxt("data/lines_patt1000spaced_noisy.csv", results, delimiter=",")
 
-X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
+    X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
 
-# %% Plotting
-xz_plot(X[0], Z[0])
+    # %% Plotting
+    xz_plot(X[0], Z[0])
 
-# filter_size = 38
-# # small_filter = int(filter_size / 5)
-# small_filter = int(np.sqrt(filter_size))
-# Z_filtered = ndimage.median_filter(Z[0], size=small_filter, mode='nearest')
-# # xz_plot(X[0], Z_filtered, title="Median filter")
-# Z_filtered2 = ndimage.median_filter(Z_filtered, size=filter_size, mode='nearest')
-# xz_plot(X[0], Z_filtered2, title="Median filter, size={}".format(filter_size))
+    # filter_size = 38
+    # small_filter = int(filter_size / 5)
+    # small_filter = int(np.sqrt(filter_size))
+    # Z_filtered = ndimage.median_filter(Z[0], size=small_filter, mode='nearest')
+    # xz_plot(X[0], Z_filtered, title="Median filter")
+    # Z_filtered2 = ndimage.median_filter(Z_filtered, size=filter_size, mode='nearest')
+    # xz_plot(X[0], Z_filtered2, title="Median filter, size={}".format(filter_size))
 
