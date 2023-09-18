@@ -50,7 +50,7 @@ def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=80, max_error=3., fil
 
     unchanged_loops = 0
     final = False
-    secondary = False  # secondary knot selection method
+    randomized = False  # randomized knot selection method
     pool = Pool(mp.cpu_count())
 
     loop_times = []
@@ -77,9 +77,9 @@ def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=80, max_error=3., fil
         profiles_split = [p for (_, p, _) in temp]
         uk_split = [u for (_, _, u) in temp]
 
-        results1 = pool.amap(adding_knots, profiles_split, curves_split,
+        results1 = pool.amap(adding_knots2, profiles_split, curves_split,
                              [add_knots] * splits, [max_error] * splits,
-                             uk_split, [secondary] * splits)
+                             uk_split, [randomized] * splits)
         while not results1.ready():
             sleep(1)
         rcurves_list = results1.get()
@@ -113,19 +113,22 @@ def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=80, max_error=3., fil
             curve = rcurve
             fit_error = rcurve_err
             unchanged_loops = 0
-
-            curve_plotting(filtered_profile_pts, rcurve, max_error, title="Refit Curve Plot")
-
+            # curve_plotting(filtered_profile_pts, rcurve, max_error, title="Refit Curve Plot")
         else:
             unchanged_loops += 1
 
-        if unchanged_loops > 2:
+        if unchanged_loops > 0:
             add_knots += 1
-            # sometimes the alg gets stuck with the regular knot generation so
-            # this will reset it to the secondary knot selection method, which is randomized
-            secondary = True
+            print("no change")
+        # elif unchanged_loops > 5:
+        #     add_knots = 1
+        #     # sometimes the alg gets stuck with the regular knot generation so
+        #     # this will reset it to the randomized knot selection method
+        #     randomized = True
         if unchanged_loops == 0:
-            secondary = False
+            randomized = False
+            add_knots = 1
+            print("\nnew curve!\n")
 
         # print("add knots = {}".format(add_knots))
         # print("Max error for sections = {}\nMax error for rf_curve = {}\nMax error for og_curve = {}\n".format(np.amax(section_err),
@@ -134,8 +137,8 @@ def pbs_iter_curvefit(profile_pts, degree=3, cp_size_start=80, max_error=3., fil
 
         loop_times.append(dt.now() - loop_start)
 
-        print(f"Params for next loop: secondary = {secondary}, \t add_knots = {add_knots}")
-        pause = input("End of loop. Press any key to continue:\n")
+        print(f"Params for next loop: randomized = {randomized}, \t add_knots = {add_knots}")
+        # pause = input("End of loop. Press any key to continue:\n")
 
     print(f"average loop time: {sum(loop_times, timedelta(0)) / len(loop_times)}\nfinal max error: {np.amax(fit_error)}\ncurve fit time: {dt.now() - pbs_start}\n")
 

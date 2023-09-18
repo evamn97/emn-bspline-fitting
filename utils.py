@@ -147,7 +147,7 @@ def merge_curves_multi(args):
     return merged_curve
 
 
-def adding_knots(profile_pts, curve, num, error_bound_value, u_k, secondary=False):
+def adding_knots(profile_pts, curve, num, error_bound_value, u_k, randomized=False):
     """
     Adds num knots to the curve IF it reduces the fitting error.
     :param profile_pts: profile data points
@@ -160,8 +160,8 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k, secondary=Fals
     :type error_bound_value: float
     :param u_k: parametric coordinates of profile_pts
     :type u_k: numpy.ndarray
-    :param secondary: if True, uses secondary knot selection method
-    :type secondary: bool
+    :param randomized: if True, uses secondary knot selection method
+    :type randomized: bool
     :return: refined curve
     """
     from geomdl_mod import Mfitting
@@ -178,12 +178,12 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k, secondary=Fals
         if len(knots_i) + num >= len(profile_pts):
             # if number is too large, reset it to within the limit
             num = (len(profile_pts) - len(knots_i)) if (len(profile_pts) - len(knots_i)) > 0 else 1
-            secondary = True
+            randomized = True
         if num > 0:      # primary knot selection method
             if num > len(e_i) - 2:  # make sure we don't go outside the index bounds of the interior array (exclude endpoints)
                 num = len(e_i) - 2
             choices += list(u_k[list(np.argsort(e_i[1:-1])[::-1][:num])])    # get "num" of highest error locations on curve to choose from (again, exclude end points of e_i)
-            if secondary:
+            if randomized:
                 # sometimes the algorithm can get stuck if it's at the knot limit for a section
                 # because oftentimes a centered knot or highest error knot already exists with multiplicity = p
                 # so we set up a random knot selection to try to reduce error and avoid infinite loops
@@ -218,8 +218,88 @@ def adding_knots(profile_pts, curve, num, error_bound_value, u_k, secondary=Fals
             curve = rcrv
             ei_max = np.amax(rfit_err)
             # print("Refit Section")
-            curve_plotting(profile_pts, rcrv, error_bound_value, title=f"Refit curve section (Secondary = {secondary})")
+            curve_plotting(profile_pts, rcrv, error_bound_value, title=f"Refit curve section (Secondary = {randomized})")
 
+    return curve
+
+
+def adding_knots2(profile_pts, curve, num, error_bound_value, u_k, randomized=False):
+    """
+    Adds num knots to the curve IF it reduces the fitting error.
+    :param profile_pts: profile data points
+    :type profile_pts: pandas.DataFrame
+    :param curve: curve to plot
+    :type curve: BSpline.Curve
+    :param num: number of knots to add
+    :type num: int
+    :param error_bound_value: maximum error value (nm) allowed
+    :type error_bound_value: float
+    :param u_k: parametric coordinates of profile_pts
+    :type u_k: numpy.ndarray
+    :param randomized: if True, uses randomized knot selection method
+    :type randomized: bool
+    :return: refined curve
+    """
+    from geomdl_mod import Mfitting
+    import numpy as np  # pathos raises an 'undefined' error without this
+
+    e_i = get_error(profile_pts, curve)
+    ei_max = np.amax(e_i)
+
+    knot_idx = 0    # idx to use for new knot (from sorted error array)
+    while ei_max > error_bound_value:
+        knots_i = curve.knotvector
+        kns = []
+        choices = []
+        rng = np.random.default_rng()
+        if len(knots_i) + num >= len(profile_pts):
+            # if number is too large, reset it to within the limit
+            num = (len(profile_pts) - len(knots_i)) if (len(profile_pts) - len(knots_i)) > 0 else 1
+            randomized = True
+        if num > 0:      # primary knot selection method
+            if num > len(e_i) - 2:  # make sure we don't go outside the index bounds of the interior array (exclude endpoints)
+                num = len(e_i) - 2
+            if randomized:
+                # sometimes the algorithm can get stuck if it's at the knot limit for a section
+                # because oftentimes a centered knot or highest error knot already exists with multiplicity = p
+                # so we set up a random knot selection to try to reduce error and avoid infinite loops
+                kns += list(np.linspace(knots_i[0], knots_i[-1], num + 2)[1:-1])
+            else:
+                choices += list(u_k[list(np.argsort(e_i[1:-1])[::-1])])    # get descending highest error locations on curve to choose from (again, exclude end points of e_i)
+                kns += choices[knot_idx:num]
+        for k in kns:
+            s = helpers.find_multiplicity(k, knots_i)
+            if s < curve.degree:
+                continue
+            else:   # if s >= curve.degree:
+                kns.remove(k)
+
+        new_kv = list(np.asarray(knots_i + kns).astype(float))
+        new_kv.sort()
+        if new_kv[-1] > knots_i[-1] or new_kv[0] < knots_i[0]:  # I think I've fixed this bug, but just in case
+            raise ValueError("One of the new knots is out of bounds!")
+
+        temp_kv = list(normalize(new_kv))
+        try:
+            rfit_curve = Mfitting.approximate_curve(list(map(tuple, profile_pts.values)), curve.degree, kv=temp_kv)
+        except ValueError:
+            print("Cannot refit section with new kv")
+            return curve
+        rfit_err = get_error(profile_pts, rfit_curve)
+
+        if np.amax(rfit_err) < ei_max:      # check if new curve has smaller max error
+            rcrv = BSpline.Curve(normalize_kv=False)
+            rcrv.degree = curve.degree
+            rcrv.ctrlpts = rfit_curve.ctrlpts
+            rcrv.knotvector = new_kv
+            curve = rcrv
+            ei_max = np.amax(rfit_err)
+            # print("Refit Section")
+            # curve_plotting(profile_pts, rcrv, error_bound_value, title=f"Refit curve section (Secondary = {randomized})")
+
+        knot_idx += 1
+        if knot_idx + num > len(choices):   # testing this in console: *doesn't* throw an error?? just returns fewer values moving toward the end of the array
+            break                           # keeping this here just in case though
     return curve
 
 
