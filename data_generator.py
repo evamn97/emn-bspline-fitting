@@ -70,23 +70,34 @@ def create_data(size: tuple, n: int, sample_spacing_nm: float, patt_width_um: fl
 
 
 if __name__ == '__main__':
-    width = 0.02    # mm     (1 um = .001 mm)
-    length = 0.02   # mm
-    height = 25.   # nm
-    profiles = 8
-    sample_spacing = 20.  # nm
-    pattern_pitch = 5.  # um
-    slope = 2.0
-    noise_stdev = 1.
-    results = create_data((width, length, height), profiles, sample_spacing, pattern_pitch, slope, noise_stdev)
+    # 1 mm       =  1e+0 mm  =  1000 um  =  1e+3 um  =  1000000 nm   =  1e+6 nm
+    # .001 mm    =  1e-3 mm  =     1 um  =  1e+0 um  =     1000 nm   =  1e+3 nm
+    # .000001 mm =  1e-6 mm  =  .001 um  =  1e-3 um  =        1 nm   =  1e+0 nm
 
-    np.savetxt("data/lines_patt1000spaced_noisy.csv", results, delimiter=",")
+    width_x = 0.02      # millimeters
+    length_y = 0.02     # millimeters
 
-    X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
+    patt_pitch = 5.     # microns
+    height_z = 25.      # nanometers
+    slope = 1.75
+    noise_stdev = 0.5
+
+    profiles = 1
+    # total_points = 1000
+
+    for total_points in [1000, 5000, 10000, 20000, 50000, 100000]:
+        sample_spacing = (width_x * 1000000) / total_points
+
+        for n in [0, noise_stdev]:
+            results = create_data((width_x, length_y, height_z), profiles, sample_spacing, patt_pitch, slope, n)
+
+            noisy = '_noisy' if n > 0 else '_clean'
+            np.savetxt(f"data_new/lines_{total_points}{noisy}.csv", results, delimiter=",")
+
+            X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
+            xz_plot(X[0], Z[0])
 
     # %% Plotting
-    xz_plot(X[0], Z[0])
-
     # filter_size = 38
     # small_filter = int(filter_size / 5)
     # small_filter = int(np.sqrt(filter_size))
