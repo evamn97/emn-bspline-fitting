@@ -1,6 +1,7 @@
-Filename: data_new/lines_1000_noisy.csv
+Filename: data_new\lines_1000_noisy.csv
 Number of points: 1000
-Initial control points: 30
-Filter window: 30
+Initial control points: 35
+Initial fit time: 0:00:00.861437
+Filter window: 20
 Final control points: 92
-Runtime: 0:00:21.692288
+Total fitting time: 0:00:20.217860

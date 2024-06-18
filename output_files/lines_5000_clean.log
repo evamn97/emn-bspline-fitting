@@ -1,6 +1,7 @@
-Filename: data_new/lines_5000_clean.csv
+Filename: data_new/time_trials\lines_5000_clean.csv
 Number of points: 5000
-Initial control points: 250
+Initial control points: 125
+Initial fit time: 0:00:19.530734
 Filter window: 0
-Final control points: 312
-Runtime: 0:15:26.348058
+Final control points: 211
+Total fitting time: 0:18:38.831352

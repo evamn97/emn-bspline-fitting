@@ -13,8 +13,8 @@ def xz_plot(X_line, Z_line, title="AFM Scan Pattern"):
     plt.rc('font', size=20)  # controls default text sizes
     fig = plt.figure(figsize=(21, 10))
     ax = plt.axes()
-    ax.plot(X_line, Z_line, label="X-Z scan plane")
-    ax.set_xlabel("X-dir (width, nm)")
+    ax.plot(X_line/1000, Z_line, label="X-Z scan plane")
+    ax.set_xlabel("X-dir (width, um)")
     ax.set_ylabel("Z-dir (height, nm)")
     ax.set_title(title)
     fig.tight_layout()
@@ -78,21 +78,22 @@ if __name__ == '__main__':
     length_y = 0.02     # millimeters
 
     patt_pitch = 5.     # microns
-    height_z = 25.      # nanometers
-    slope = 1.75
+    height_z = 20.      # nanometers
+    slope = 1.
     noise_stdev = 0.5
 
     profiles = 1
     # total_points = 1000
 
-    for total_points in [1000, 5000, 10000, 20000, 50000, 100000]:
+    # for total_points in [500, 1000, 5000, 10000, 20000, 50000, 100000]:
+    for total_points in [2500]:
         sample_spacing = (width_x * 1000000) / total_points
 
         for n in [0, noise_stdev]:
             results = create_data((width_x, length_y, height_z), profiles, sample_spacing, patt_pitch, slope, n)
 
             noisy = '_noisy' if n > 0 else '_clean'
-            np.savetxt(f"data_new/lines_{total_points}{noisy}.csv", results, delimiter=",")
+            # np.savetxt(f"data_new/lines_{total_points}{noisy}.csv", results, delimiter=",")
 
             X, Y, Z = results[:, 0].reshape((profiles, -1)), results[:, 1].reshape((profiles, -1)), results[:, 2].reshape((profiles, -1))
             xz_plot(X[0], Z[0])

@@ -1,6 +1,7 @@
-Filename: data_new/lines_1000_clean.csv
+Filename: data_new\lines_1000_clean.csv
 Number of points: 1000
-Initial control points: 30
+Initial control points: 35
+Initial fit time: 0:00:01.876624
 Filter window: 0
-Final control points: 88
-Runtime: 0:00:33.840193
+Final control points: 93
+Total fitting time: 0:00:26.103897

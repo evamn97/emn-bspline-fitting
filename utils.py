@@ -25,9 +25,11 @@ plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc('figure', titlesize=LARGE_SIZE)  # fontsize of the figure title
 
 # point & line sizes for matplotlib plots
+EXTRA_THIN_LINES = 2
 THIN_LINES = 3
 MEDIUM_LINES = 4
 THICK_LINES = 5
+EXTRA_THICK_LINES = 10
 
 
 def find_nearest(a0, a, mode='normal'):
@@ -293,15 +295,15 @@ def parallel_errors(arr_split, curves):
     return error
 
 
-def curve_plotting(profile_pts, crv, error_bound_value, sep=False, med_filter=0, title="BSpline curve fit plot", save_to="", plot_show=False):
+def curve_plotting(profile_pts, crv, err_bound, sep=False, med_filter=0, title="BSpline fit", save_to="", plot_show=False):
     """ Plots a single curve in the X-Z plane with corresponding fitting error.
 
     :param profile_pts: profile data points
     :type profile_pts: pandas.DataFrame
     :param crv: curve to plot
     :type crv: BSpline.Curve
-    :param error_bound_value: defined error bound for iterative fit as ratio of maximum curve value
-    :type error_bound_value: float (must be between 0 and 1)
+    :param err_bound: defined error bound for iterative fit as ratio of maximum curve value
+    :type err_bound: float (must be between 0 and 1)
     :param sep: if True, plot the x, y and z error in error plot
     :type sep: bool
     :param med_filter: sets median filter window size if not None
@@ -334,7 +336,8 @@ def curve_plotting(profile_pts, crv, error_bound_value, sep=False, med_filter=0,
         scaling_z = 1
         xy_units = 'nm'
 
-    fig, ax = plt.subplots(2, figsize=(40, 20), sharex='all')
+    # fig, ax = plt.subplots(2, figsize=(40, 20), sharex='all')
+    fig, ax = plt.subplots(2, figsize=(30, 20), sharex='all')
     if med_filter > 1:
         filtered_data = profile_pts[['x', 'y']]
         small_filter = int(np.sqrt(med_filter) + 1) if int(np.sqrt(med_filter)) >= 1 else 1
@@ -349,9 +352,16 @@ def curve_plotting(profile_pts, crv, error_bound_value, sep=False, med_filter=0,
         crv_err = get_error(profile_pts, crv, sep=sep)
 
     ax[0].grid(True)
-    ax[0].plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='.', linewidth=THIN_LINES)
-    ax[0].plot((crv_pts[:, 0] * scaling_xy), (crv_pts[:, 2] * scaling_z), label='Fitted Curve', c='red', linewidth=MEDIUM_LINES)
-    ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+', c='orange', linestyle='--', linewidth=MEDIUM_LINES)
+
+    # plot control points first so they're underneath
+    # ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='x', c='orange', markersize=THICK_LINES*75, markeredgewidth=THICK_LINES, linestyle='--', linewidth=MEDIUM_LINES)
+    if "final" in title.lower():
+        ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+', c='darkorange', markersize=THICK_LINES*3, markeredgewidth=MEDIUM_LINES, linestyle=':', linewidth=THIN_LINES, alpha=0.9)
+    else:
+        ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+', c='darkorange', markersize=THICK_LINES*3, markeredgewidth=THICK_LINES, linestyle=':', linewidth=MEDIUM_LINES)
+
+    ax[0].plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='x',  markersize=EXTRA_THICK_LINES, markeredgewidth=EXTRA_THIN_LINES, linewidth=THIN_LINES)
+    ax[0].plot((crv_pts[:, 0] * scaling_xy), (crv_pts[:, 2] * scaling_z), label='Fitted Curve', c='red', linewidth=THICK_LINES)
 
     scaled_kv = normalize(crv.knotvector, low=np.amin((profile_pts['x'] * scaling_xy)), high=np.amax((profile_pts['x'] * scaling_xy)))
 
@@ -374,12 +384,12 @@ def curve_plotting(profile_pts, crv, error_bound_value, sep=False, med_filter=0,
     else:
         ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err, 'k', label='Fitting error', linewidth=THIN_LINES)
 
-    ax[1].axhline(y=error_bound_value, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--', label='Error bound', linewidth=THICK_LINES)
+    ax[1].axhline(y=err_bound, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--', label='Error bound', linewidth=THICK_LINES)
 
     ax[1].set(xlabel=f'Lateral Position X [{xy_units}]', ylabel='Error [nm]',
               title=f'Fitting Error: Max={round(np.amax(crv_err), 4)}, '
                     f'Avg={round(np.average(crv_err), 4)}, '
-                    f'Fitting Bound={round(error_bound_value, 2)} nm')
+                    f'Fitting Bound={round(err_bound, 2)} nm')
     ax[0].legend(loc="upper right")
     ax[1].legend(loc="upper right")
     fig.tight_layout()
@@ -387,44 +397,56 @@ def curve_plotting(profile_pts, crv, error_bound_value, sep=False, med_filter=0,
     if save_to != "":
         if not os.path.isdir(save_to):
             os.makedirs(save_to)
-        fig_title = f"{title.replace(' ', '_').lower()}_{len(profile_pts)}pts_{crv.ctrlpts_size}cp.png"
+        noise = '_noisy' if med_filter > 0 else ''
+        fig_title = f"{len(profile_pts)}pts{noise}_{title.replace(' ', '_').lower()}_{crv.ctrlpts_size}cp.png"
         plt.savefig(os.path.join(save_to, fig_title))
 
     if plot_show:
         plt.show()
 
 
-def plot_data_only(profile_pts, f_window=0, title="Raw Input Data", save_to="", plot_show=False):
+def plot_data_only(profile_pts, med_filter=0, title="Input Data", save_to="", plot_show=False):
     data_xz = profile_pts[['x', 'z']].values
 
     # first assume data is in nm
-    if np.amax(data_xz) / (10 ** 6) >= 1:
-        scaling_xy = 10 ** -6
-        scaling_z = 1
-        xy_units = 'mm'
-    elif np.amax(data_xz) / (10 ** 3) >= 1:
-        scaling_xy = 10 ** -3
-        scaling_z = 1
-        xy_units = 'um'
+    # if np.amax(data_xz) / (10 ** 6) >= 1:
+    #     scaling_xy = 10 ** -6
+    #     scaling_z = 1
+    #     xy_units = 'mm'
+    # elif np.amax(data_xz) / (10 ** 3) >= 1:
+    #     scaling_xy = 10 ** -3
+    #     scaling_z = 1
+    #     xy_units = 'um'
+    #
+    # else:   # assumes saved in nm
+    #     scaling_xy = 1
+    #     scaling_z = 1
+    #     xy_units = 'nm'
 
-    else:   # assumes saved in nm
-        scaling_xy = 1
-        scaling_z = 1
-        xy_units = 'nm'
+    scaling_xy = 1000
+    scaling_z = 10 ** 9
+    xy_units = 'mm'
 
     fig, ax = plt.subplots(figsize=(30, 15))
+    # fig, ax = plt.subplots(figsize=(40, 12))
     ax.grid(True)
-    ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', marker='.', c='blue', alpha=0.6, linewidth=THIN_LINES)
     axtitle = title + f" (points={len(profile_pts)})"
 
-    if f_window > 1:
-        small_filter = int(np.sqrt(f_window) + 1) if int(np.sqrt(f_window)) >= 1 else 1
+    if med_filter > 1:
+        ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='x',
+                markersize=EXTRA_THICK_LINES, markeredgewidth=THIN_LINES, linewidth=THIN_LINES, alpha=0.7)
+
+        small_filter = int(np.sqrt(med_filter) + 1) if int(np.sqrt(med_filter)) >= 1 else 1
         filtered_z = nd.median_filter(nd.median_filter(nd.median_filter(profile_pts['z'].values,
                                                                         size=small_filter, mode='nearest'),
-                                                       size=f_window, mode='nearest'),
+                                                       size=med_filter, mode='nearest'),
                                       size=small_filter, mode='nearest')
-        axtitle += f" & Median Filtered (window={f_window})"
+        axtitle += f" & Median Filtered (window={med_filter})"
         ax.plot((data_xz[:, 0] * scaling_xy), filtered_z, label='Median Filtered Data', c='purple', linewidth=THICK_LINES)
+    else:
+        ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', linewidth=MEDIUM_LINES)
+        # ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='x',
+        #         markersize=EXTRA_THICK_LINES, markeredgewidth=THIN_LINES, linewidth=MEDIUM_LINES)
 
     ax.set(xlabel=f'Lateral Position X [{xy_units}]', ylabel='Height Z [nm]', title=axtitle)
     ax.legend(loc="upper right")
@@ -432,7 +454,8 @@ def plot_data_only(profile_pts, f_window=0, title="Raw Input Data", save_to="", 
     if save_to != "":
         if not os.path.isdir(save_to):
             os.makedirs(save_to)
-        fig_title = f"{title.replace(' ', '-').lower()}_{len(profile_pts)}pts.png"
+        noise = '_noisy' if med_filter > 0 else ''
+        fig_title = f"{len(profile_pts)}pts{noise}_{title.replace(' ', '_').lower()}.png"
         save_path = os.path.join(save_to, fig_title)
         plt.savefig(save_path)
 

@@ -10,3 +10,9 @@
 /data/90-12MasterSite20001121_090126_XYZ_Ch1.024.csv
 /kv-fixing/
 /.vscode/
+__pycache__
+/.old
+/data_old
+/output_files
+scratch.py
+scratch_utils.py
