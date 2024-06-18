@@ -15,4 +15,6 @@ __pycache__
 /data_old
 /output_files
 scratch.py
-scratch_utils.py
+noisy_data.png
+exp_initial_fit.png
+exp_profile_bruker.png
