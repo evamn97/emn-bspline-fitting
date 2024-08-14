@@ -280,13 +280,15 @@ def get_error(profile_pts, curve_obj, sep=False):
         eval_idx = normalize(eval_idx, low=min(curve_obj.knotvector), high=max(curve_obj.knotvector))
     eval_idx = list(eval_idx)
     curve_points = np.array(curve_obj.evaluate_list(eval_idx))
-    curve_error = np.sqrt(np.sum(np.square(np.subtract(points, curve_points)), axis=1))
+
+    x_error = np.sqrt(np.square(np.subtract(points[:, 0], curve_points[:, 0])))
+    y_error = np.sqrt(np.square(np.subtract(points[:, 1], curve_points[:, 1])))
+    z_error = np.sqrt(np.square(np.subtract(points[:, 2], curve_points[:, 2])))
+
     if sep:
-        x_error = np.sqrt(np.square(np.subtract(points[:, 0], curve_points[:, 0])))
-        y_error = np.sqrt(np.square(np.subtract(points[:, 1], curve_points[:, 1])))
-        z_error = np.sqrt(np.square(np.subtract(points[:, 2], curve_points[:, 2])))
-        curve_error = np.stack((curve_error, x_error, y_error, z_error), axis=1)
-    return curve_error
+        return np.stack((curve_error, x_error, y_error, z_error), axis=1)
+    else:
+        return z_error
 
 
 def parallel_errors(arr_split, curves):
