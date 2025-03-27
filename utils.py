@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Union, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -16,11 +16,11 @@ SMALL_SIZE = 28
 MEDIUM_SIZE = 32
 LARGE_SIZE = 36
 
-plt.rc('font', size=MEDIUM_SIZE)        # controls default text sizes
-plt.rc('axes', titlesize=LARGE_SIZE)    # fontsize of the axes title
-plt.rc('axes', labelsize=LARGE_SIZE)    # fontsize of the x and y labels
-plt.rc('xtick', labelsize=SMALL_SIZE)   # fontsize of the tick labels
-plt.rc('ytick', labelsize=SMALL_SIZE)   # fontsize of the tick labels
+plt.rc('font', size=MEDIUM_SIZE)  # controls default text sizes
+plt.rc('axes', titlesize=LARGE_SIZE)  # fontsize of the axes title
+plt.rc('axes', labelsize=LARGE_SIZE)  # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)  # fontsize of the tick labels
 plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc('figure', titlesize=LARGE_SIZE)  # fontsize of the figure title
 
@@ -30,6 +30,15 @@ THIN_LINES = 3
 MEDIUM_LINES = 4
 THICK_LINES = 5
 EXTRA_THICK_LINES = 10
+
+
+def zero_min(df: pd.DataFrame) -> pd.DataFrame:
+    """Zeroes out the minimum of each column in a dataframe."""
+
+    for col in df.columns:
+        df[col] = df[col] - df[col].min()
+
+    return df
 
 
 def find_nearest(a0, a, mode='normal'):
@@ -119,18 +128,19 @@ def merge_curves_multi(args):
     for c in args:
         ctrlpts_new = ctrlpts_new + c.ctrlpts
         kv_new = sorted(kv_new + c.knotvector)
-        join_knots.append(c.knotvector[-1])     # get 
+        join_knots.append(c.knotvector[-1])  # get
     join_knots = join_knots[:-1]
     for j in join_knots:
         s_i = helpers.find_multiplicity(j, kv_new)
-        for r in range(s_i - p - 1):    # ensures rule m = n + p + 1
+        for r in range(s_i - p - 1):  # ensures rule m = n + p + 1
             kv_new.remove(j)
         s_i = helpers.find_multiplicity(j, kv_new)
         s.append(s_i)
 
     kv_new = list(np.asarray(kv_new).astype(float))
 
-    num_knots = len(ctrlpts_new) + p + 1  # assuming all cpts are kept, find the required number of knots from m = n + p + 1
+    num_knots = len(
+        ctrlpts_new) + p + 1  # assuming all cpts are kept, find the required number of knots from m = n + p + 1
     if num_knots != len(kv_new):
         raise ValueError("Something went wrong with getting the merged knot vector. Check knot removals.")
 
@@ -140,19 +150,19 @@ def merge_curves_multi(args):
     merged_curve.delta = 0.001
     merged_curve.evaluate()
 
-    where_s = np.where(np.asarray(s) > p)[0]    # returns a 1-dim tuple for some reason
+    where_s = np.where(np.asarray(s) > p)[0]  # returns a 1-dim tuple for some reason
     for i in where_s:
         # if len(kv_new) > 100:   # for large datasets, the knot deletions that occur during merging will blow up the fit error
         #     delete = s[i] - p
         # else:                   # for smaller datasets, it is preferred not to increase the multiplicity so much
         #     delete = s[i] - (p - 1)
         # TODO: does this cause problems?
-        delete = s[i] - (p - 1)     # instead of above
+        delete = s[i] - (p - 1)  # instead of above
         if delete > 0:
             merged_curve = Mop.remove_knot(merged_curve, [join_knots[i]], [delete])
 
     # TODO: kv fix debugging part 3
-    ctpts_arr = np.asarray(merged_curve.ctrlpts)     # get ctrlpts as numpy array to check y values
+    ctpts_arr = np.asarray(merged_curve.ctrlpts)  # get ctrlpts as numpy array to check y values
     if not (np.round(ctpts_arr[:, 1], 1) == round(ctpts_arr[0, 1], 1)).all():
         print("You've got a wacky control point!! (after knot removal in merging)")
 
@@ -183,7 +193,7 @@ def adding_knots(profile_pts, curve, error_bound_value, u_k, num=1, randomized=F
     ei_max = np.amax(e_i)
     outcome = ""
 
-    knot_idx = 0    # idx to use for new knot (from sorted error array)
+    knot_idx = 0  # idx to use for new knot (from sorted error array)
     while ei_max > error_bound_value:
         knots_init = curve.knotvector
         kns = []
@@ -192,8 +202,9 @@ def adding_knots(profile_pts, curve, error_bound_value, u_k, num=1, randomized=F
         if len(knots_init) + num >= len(profile_pts):
             # if number is too large, reset it to within the limit
             num = (len(profile_pts) - len(knots_init)) if (len(profile_pts) - len(knots_init)) > 0 else 1
-        if num > 0:      # primary knot selection method
-            if num > len(e_i) - 2:  # make sure we don't go outside the index bounds of the interior array (exclude endpoints)
+        if num > 0:  # primary knot selection method
+            if num > len(
+                    e_i) - 2:  # make sure we don't go outside the index bounds of the interior array (exclude endpoints)
                 num = len(e_i) - 2
             if randomized:
                 # sometimes the algorithm can get stuck if it's at the knot limit for a section
@@ -201,13 +212,14 @@ def adding_knots(profile_pts, curve, error_bound_value, u_k, num=1, randomized=F
                 # so we set up a random knot selection to try to reduce error and avoid infinite loops
                 kns += list(np.linspace(knots_init[0], knots_init[-1], num + 2)[1:-1])
             else:
-                choices += list(u_k[list(np.argsort(e_i[1:-1])[::-1])])    # get descending highest error locations on curve to choose from (again, exclude end points of e_i)
+                choices += list(u_k[list(np.argsort(e_i[1:-1])[
+                                         ::-1])])  # get descending highest error locations on curve to choose from (again, exclude end points of e_i)
                 kns += choices[knot_idx:num]
         for k in kns:
             s = helpers.find_multiplicity(k, knots_init)
             if s < curve.degree:
                 continue
-            else:   # if s >= curve.degree:
+            else:  # if s >= curve.degree:
                 kns.remove(k)
 
         new_kv = list(np.asarray(knots_init + kns).astype(float))
@@ -223,7 +235,7 @@ def adding_knots(profile_pts, curve, error_bound_value, u_k, num=1, randomized=F
             return curve
         rfit_err = get_error(profile_pts, rfit_curve)
 
-        if np.amax(rfit_err) < ei_max:      # check if new curve has smaller max error
+        if np.amax(rfit_err) < ei_max:  # check if new curve has smaller max error
             ctpts_arr = np.asarray(rfit_curve.ctrlpts)  # get ctrlpts as numpy array to check y values
             if not (np.round(ctpts_arr[:, 1], 1) == round(ctpts_arr[0, 1], 1)).all():
                 # sometimes increasing multiplicity of neighboring knots will cause outlier control points
@@ -235,13 +247,13 @@ def adding_knots(profile_pts, curve, error_bound_value, u_k, num=1, randomized=F
                 rcrv.ctrlpts = rfit_curve.ctrlpts
                 rcrv.knotvector = new_kv
                 curve = rcrv
-                e_i = rfit_err      # update error
+                e_i = rfit_err  # update error
                 ei_max = np.amax(rfit_err)
                 # print(f"Refit section, max error = {round(ei_max, 4)} nm")
         else:
-            knot_idx += 1   # move down the list of error-sorted indices used to select new knots
+            knot_idx += 1  # move down the list of error-sorted indices used to select new knots
 
-        if knot_idx + num > len(choices):   # if we reach the end of error-sorted indices, change behavior
+        if knot_idx + num > len(choices):  # if we reach the end of error-sorted indices, change behavior
             num += 1
             knot_idx = 0
             if num > len(e_i) - 2:  # if we reach the end of choices AND max num, try random knots
@@ -272,7 +284,7 @@ def get_error(profile_pts, curve_obj, sep=False):
     :param sep: if True, returns a 2D array of x, y, z error values
     :return: fitted curve error, ndarray
     """
-    import numpy as np  # pathos raises an 'np undefined' error without this
+    import numpy as np  # pathos raises a 'np undefined' error without this
     points = profile_pts.values  # get array of points from df
 
     eval_idx = Mfitting.compute_params_curve(list(map(tuple, points)))
@@ -281,14 +293,16 @@ def get_error(profile_pts, curve_obj, sep=False):
     eval_idx = list(eval_idx)
     curve_points = np.array(curve_obj.evaluate_list(eval_idx))
 
-    x_error = np.sqrt(np.square(np.subtract(points[:, 0], curve_points[:, 0])))
-    y_error = np.sqrt(np.square(np.subtract(points[:, 1], curve_points[:, 1])))
-    z_error = np.sqrt(np.square(np.subtract(points[:, 2], curve_points[:, 2])))
+    curve_error = np.sqrt(np.sum(np.square(np.subtract(points, curve_points)), axis=1))
 
     if sep:
+        x_error = np.sqrt(np.square(np.subtract(points[:, 0], curve_points[:, 0])))
+        y_error = np.sqrt(np.square(np.subtract(points[:, 1], curve_points[:, 1])))
+        z_error = np.sqrt(np.square(np.subtract(points[:, 2], curve_points[:, 2])))
         return np.stack((curve_error, x_error, y_error, z_error), axis=1)
+
     else:
-        return z_error
+        return curve_error
 
 
 def parallel_errors(arr_split, curves):
@@ -297,7 +311,8 @@ def parallel_errors(arr_split, curves):
     return error
 
 
-def curve_plotting(profile_pts, crv, err_bound, sep=False, med_filter=0, title="BSpline fit", save_to="", plot_show=False):
+def curve_plotting(profile_pts, crv, err_bound, sep=False, med_filter=0, title="BSpline fit", save_to="",
+                   plot_show=False):
     """ Plots a single curve in the X-Z plane with corresponding fitting error.
 
     :param profile_pts: profile data points
@@ -333,13 +348,13 @@ def curve_plotting(profile_pts, crv, err_bound, sep=False, med_filter=0, title="
         scaling_z = 1
         xy_units = 'um'
 
-    else:   # assumes saved in nm
+    else:  # assumes saved in nm
         scaling_xy = 1
         scaling_z = 1
         xy_units = 'nm'
 
-    # fig, ax = plt.subplots(2, figsize=(40, 20), sharex='all')
-    fig, ax = plt.subplots(2, figsize=(30, 20), sharex='all')
+    fig, ax = plt.subplots(2, figsize=(40, 20), sharex='all')
+    # fig, ax = plt.subplots(2, figsize=(30, 20), sharex='all')
     if med_filter > 1:
         filtered_data = profile_pts[['x', 'y']]
         small_filter = int(np.sqrt(med_filter) + 1) if int(np.sqrt(med_filter)) >= 1 else 1
@@ -358,35 +373,50 @@ def curve_plotting(profile_pts, crv, err_bound, sep=False, med_filter=0, title="
     # plot control points first so they're underneath
     # ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='x', c='orange', markersize=THICK_LINES*75, markeredgewidth=THICK_LINES, linestyle='--', linewidth=MEDIUM_LINES)
     if "final" in title.lower():
-        ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+', c='darkorange', markersize=THICK_LINES*3, markeredgewidth=MEDIUM_LINES, linestyle=':', linewidth=THIN_LINES, alpha=0.9)
+        ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+',
+                   c='darkorange', markersize=THICK_LINES * 3, markeredgewidth=MEDIUM_LINES, linestyle=':',
+                   linewidth=THIN_LINES, alpha=0.9)
     else:
-        ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+', c='darkorange', markersize=THICK_LINES*3, markeredgewidth=THICK_LINES, linestyle=':', linewidth=MEDIUM_LINES)
+        ax[0].plot((ct_pts[:, 0] * scaling_xy), (ct_pts[:, 2] * scaling_z), label='Control Points', marker='+',
+                   c='darkorange', markersize=THICK_LINES * 3, markeredgewidth=THICK_LINES, linestyle=':',
+                   linewidth=MEDIUM_LINES)
 
-    ax[0].plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='x',  markersize=EXTRA_THICK_LINES, markeredgewidth=EXTRA_THIN_LINES, linewidth=THIN_LINES)
-    ax[0].plot((crv_pts[:, 0] * scaling_xy), (crv_pts[:, 2] * scaling_z), label='Fitted Curve', c='red', linewidth=THICK_LINES)
+    ax[0].plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue',
+               # marker='x',  markersize=EXTRA_THICK_LINES, markeredgewidth=EXTRA_THIN_LINES,
+               linewidth=THIN_LINES)
+    ax[0].plot((crv_pts[:, 0] * scaling_xy), (crv_pts[:, 2] * scaling_z), label='Fitted Curve', c='red',
+               linewidth=THICK_LINES)
 
-    scaled_kv = normalize(crv.knotvector, low=np.amin((profile_pts['x'] * scaling_xy)), high=np.amax((profile_pts['x'] * scaling_xy)))
+    scaled_kv = normalize(crv.knotvector, low=np.amin((profile_pts['x'] * scaling_xy)),
+                          high=np.amax((profile_pts['x'] * scaling_xy)))
 
     # top = np.amax(profile_pts['z']) + (np.amax(profile_pts['z']) - np.amin(profile_pts['z'])) * 0.5
     # bottom = np.amin(profile_pts['z']) - (np.amax(profile_pts['z']) - np.amin(profile_pts['z'])) * 0.5
     # ax[0].hist(scaled_kv, bins=500, bottom=bottom, label='Knot Locations')
-    bottom = np.amin(ct_pts[:, 2] * scaling_z) - (np.amax(ct_pts[:, 2] * scaling_z) - np.amin(ct_pts[:, 2] * scaling_z)) * 0.1
-    ax[0].hist(scaled_kv, bins=500, bottom=bottom, label='Knot Locations')    # instead of hist above
-    top = np.amax(ct_pts[:, 2] * scaling_z) + (np.amax(ct_pts[:, 2] * scaling_z) - np.amin(ct_pts[:, 2] * scaling_z)) * 0.1
+    bottom = np.amin(ct_pts[:, 2] * scaling_z) - (
+                np.amax(ct_pts[:, 2] * scaling_z) - np.amin(ct_pts[:, 2] * scaling_z)) * 0.1
+    ax[0].hist(scaled_kv, bins=500, bottom=bottom, label='Knot Locations')  # instead of hist above
+    top = np.amax(ct_pts[:, 2] * scaling_z) + (
+                np.amax(ct_pts[:, 2] * scaling_z) - np.amin(ct_pts[:, 2] * scaling_z)) * 0.1
     ax[0].set_ylim(bottom, top)
 
-    ax[0].set(ylabel='Height Z [nm]', title=(title.upper() + f': Control Points={crv.ctrlpts_size}, Data Size={len(profile_pts)}'))
+    ax[0].set(ylabel='Height Z [nm]',
+              title=(title.upper() + f': Control Points={crv.ctrlpts_size}, Data Size={len(profile_pts)}'))
 
     ax[1].grid(True)
     if sep:
         # ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 0], 'k', label='Fitting error', linewidth=MEDIUM_LINES)
-        ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 1], label='X error', c='blue', alpha=0.8, linewidth=THIN_LINES)
-        ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 2], label='Y error', c='darkgreen', alpha=0.8, linewidth=THIN_LINES)
-        ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 3], label='Z error', c='crimson', alpha=0.8, linewidth=THIN_LINES)
+        ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 1], label='X error', c='blue', alpha=0.8,
+                   linewidth=THIN_LINES)
+        ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 2], label='Y error', c='darkgreen', alpha=0.8,
+                   linewidth=THIN_LINES)
+        ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err[:, 3], label='Z error', c='crimson', alpha=0.8,
+                   linewidth=THIN_LINES)
     else:
         ax[1].plot((data_xz[:, 0] * scaling_xy), crv_err, 'k', label='Fitting error', linewidth=THIN_LINES)
 
-    ax[1].axhline(y=err_bound, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--', label='Error bound', linewidth=THICK_LINES)
+    ax[1].axhline(y=err_bound, xmin=data_xz[0, 0], xmax=data_xz[-1, 0], color='k', linestyle='--', label='Error bound',
+                  linewidth=THICK_LINES)
 
     ax[1].set(xlabel=f'Lateral Position X [{xy_units}]', ylabel='Error [nm]',
               title=f'Fitting Error: Max={round(np.amax(crv_err), 4)}, '
@@ -407,51 +437,83 @@ def curve_plotting(profile_pts, crv, err_bound, sep=False, med_filter=0, title="
         plt.show()
 
 
-def plot_data_only(profile_pts, med_filter=0, title="Input Data", save_to="", plot_show=False):
+def plot_data_only(profile_pts: pd.DataFrame,
+                   med_filter: Optional[int] = None,
+                   plot_filter_error: bool = False,
+                   title: str = "Input Data",
+                   save_to: str = "",
+                   plot_show: bool = False,
+                   xy_in_units: Literal['nm', 'um', 'mm'] = 'nm',
+                   xy_out_units: Literal['nm', 'um', 'mm'] = 'um',
+                   z_in_units: Literal['nm', 'um', 'mm'] = 'nm'):
+
+    if xy_in_units != xy_out_units:
+        if any([(xy_in_units == 'nm' and xy_out_units == 'um'),
+                (xy_in_units == 'um' and xy_out_units == 'mm')]):
+            scaling_xy = 10 ** -3
+        elif xy_in_units == 'nm' and xy_out_units == 'mm':
+            scaling_xy = 10 ** -6
+        elif any([(xy_in_units == 'um' and xy_out_units == 'nm'),
+                  (xy_in_units == 'mm' and xy_out_units == 'um')]):
+            scaling_xy = 10 ** 3
+        else:
+            scaling_xy = 1
+            xy_out_units = xy_in_units
+    else:
+        scaling_xy = 1
+
     data_xz = profile_pts[['x', 'z']].values
+    data_xz[:, 0] *= scaling_xy
 
-    # first assume data is in nm
-    # if np.amax(data_xz) / (10 ** 6) >= 1:
-    #     scaling_xy = 10 ** -6
-    #     scaling_z = 1
-    #     xy_units = 'mm'
-    # elif np.amax(data_xz) / (10 ** 3) >= 1:
-    #     scaling_xy = 10 ** -3
-    #     scaling_z = 1
-    #     xy_units = 'um'
-    #
-    # else:   # assumes saved in nm
-    #     scaling_xy = 1
-    #     scaling_z = 1
-    #     xy_units = 'nm'
+    if z_in_units == 'um':
+        data_xz[:, 1] *= 10 ** 3
+    elif z_in_units == 'mm':
+        data_xz[:, 1] *= 10 ** 6
 
-    scaling_xy = 1000
-    scaling_z = 10 ** 9
-    xy_units = 'mm'
-
-    fig, ax = plt.subplots(figsize=(30, 15))
-    # fig, ax = plt.subplots(figsize=(40, 12))
-    ax.grid(True)
     axtitle = title + f" (points={len(profile_pts)})"
 
-    if med_filter > 1:
-        ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='x',
-                markersize=EXTRA_THICK_LINES, markeredgewidth=THIN_LINES, linewidth=THIN_LINES, alpha=0.7)
+    if med_filter:
 
         small_filter = int(np.sqrt(med_filter) + 1) if int(np.sqrt(med_filter)) >= 1 else 1
-        filtered_z = nd.median_filter(nd.median_filter(nd.median_filter(profile_pts['z'].values,
+        filtered_z = nd.median_filter(nd.median_filter(nd.median_filter(data_xz[:, 1],
                                                                         size=small_filter, mode='nearest'),
                                                        size=med_filter, mode='nearest'),
                                       size=small_filter, mode='nearest')
-        axtitle += f" & Median Filtered (window={med_filter})"
-        ax.plot((data_xz[:, 0] * scaling_xy), filtered_z, label='Median Filtered Data', c='purple', linewidth=THICK_LINES)
-    else:
-        ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', linewidth=MEDIUM_LINES)
-        # ax.plot((data_xz[:, 0] * scaling_xy), (data_xz[:, 1] * scaling_z), label='Input Data', c='blue', marker='x',
-        #         markersize=EXTRA_THICK_LINES, markeredgewidth=THIN_LINES, linewidth=MEDIUM_LINES)
 
-    ax.set(xlabel=f'Lateral Position X [{xy_units}]', ylabel='Height Z [nm]', title=axtitle)
-    ax.legend(loc="upper right")
+        if plot_filter_error:
+            fig, (ax, ax2) = plt.subplots(2, figsize=(40, 20), sharex='all')
+
+            filter_error = np.sqrt(np.square(np.subtract(data_xz[:, 1], filtered_z)))
+            ax2.grid(True)
+            ax2.plot(data_xz[:, 0], filter_error, 'k', label='Fitting error', linewidth=THIN_LINES)
+            ax2.set(xlabel=f'Lateral Position X [{xy_out_units}]', ylabel='Error [nm]',
+                    title=f'Filter Error: Max={round(np.amax(filter_error), 4)}, '
+                          f'Avg={round(np.average(filter_error), 4)} nm')
+
+        else:
+            fig, ax = plt.subplots(figsize=(40, 12))
+            ax.set(xlabel=f'Lateral Position X [{xy_out_units}]')
+
+        ax.plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue',
+                # marker='x', markersize=THICK_LINES, markeredgewidth=THIN_LINES,
+                linewidth=THIN_LINES, alpha=0.8)
+
+        axtitle += f" & Median Filtered (window={med_filter})"
+        ax.plot(data_xz[:, 0], filtered_z, label='Median Filtered Data',
+                c='maroon', linewidth=7)
+        ax.legend(loc="upper right")
+
+    else:
+
+        fig, ax = plt.subplots(figsize=(40, 12))
+        # ax.plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue', linewidth=MEDIUM_LINES)
+        ax.plot(data_xz[:, 0], data_xz[:, 1], label='Input Data', c='blue', linewidth=THIN_LINES)
+        ax.set(xlabel=f'Lateral Position X [{xy_out_units}]')
+
+    ax.grid(True)
+    ax.set(ylabel='Height Z [nm]', title=axtitle
+           # , xlim=(data_xz[:, 0].min(), data_xz[:, 0].max())
+           )
     fig.tight_layout()
     if save_to != "":
         if not os.path.isdir(save_to):
@@ -463,7 +525,6 @@ def plot_data_only(profile_pts, med_filter=0, title="Input Data", save_to="", pl
 
     if plot_show:
         plt.show()
-
 
 # def plot_curve3d(profile_pts, curve, title="3D Curve Plot"):
 #     """
